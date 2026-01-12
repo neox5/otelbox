@@ -3,12 +3,12 @@ server:
   path: /metrics
 
 clock:
-  interval: 100ms
+  interval: 250ms
 
 sources:
   mqput_source:
     type: random_int
-    min: 1
+    min: 0
     max: 10
 
 values:
