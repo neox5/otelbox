@@ -1,0 +1,34 @@
+server:
+  port: 9090
+  path: /metrics
+
+clock:
+  interval: 100ms
+
+sources:
+  mqput_source:
+    type: random_int
+    min: 1
+    max: 10
+
+values:
+  mqput_counter:
+    source: mqput_source
+    transforms:
+      - accumulate
+
+  mqput_gauge:
+    clone_from: mqput_counter
+    wrap: reset_on_read
+    reset_value: 0
+
+metrics:
+  - name: ibmmq_queue_mqput_total
+    type: counter
+    help: "Total MQ PUT operations since start"
+    value: mqput_counter
+
+  - name: ibmmq_queue_mqput_recent
+    type: gauge
+    help: "Recent MQ PUT operations in window"
+    value: mqput_gauge
