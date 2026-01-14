@@ -28,12 +28,9 @@ func Load(path string) (*Config, error) {
 
 // validate checks configuration consistency.
 func validate(cfg *Config) error {
-	// Validate server
-	if cfg.Server.Port <= 0 || cfg.Server.Port > 65535 {
-		return fmt.Errorf("invalid server port: %d", cfg.Server.Port)
-	}
-	if cfg.Server.Path == "" {
-		return fmt.Errorf("server path cannot be empty")
+	// Apply defaults and validate exporters
+	if err := validateExport(&cfg.Export); err != nil {
+		return err
 	}
 
 	// Validate simulation config exists
@@ -79,6 +76,71 @@ func validate(cfg *Config) error {
 		if _, exists := cfg.Simulation.Values[metric.Value]; !exists {
 			return fmt.Errorf("metric %q references unknown value %q", metric.Name, metric.Value)
 		}
+	}
+
+	return nil
+}
+
+// validateExport applies defaults and validates export configuration.
+func validateExport(export *ExportConfig) error {
+	// Default to Prometheus enabled if no exporters configured
+	if export.Prometheus == nil && export.OTEL == nil {
+		export.Prometheus = &PrometheusExportConfig{
+			Enabled: true,
+			Port:    DefaultPrometheusPort,
+			Path:    DefaultPrometheusPath,
+		}
+		return nil
+	}
+
+	// Apply Prometheus defaults
+	if export.Prometheus != nil {
+		if export.Prometheus.Enabled {
+			if export.Prometheus.Port == 0 {
+				export.Prometheus.Port = DefaultPrometheusPort
+			}
+			if export.Prometheus.Path == "" {
+				export.Prometheus.Path = DefaultPrometheusPath
+			}
+
+			if export.Prometheus.Port <= 0 || export.Prometheus.Port > 65535 {
+				return fmt.Errorf("invalid prometheus port: %d", export.Prometheus.Port)
+			}
+		}
+	}
+
+	// Apply OTEL defaults
+	if export.OTEL != nil && export.OTEL.Enabled {
+		if export.OTEL.Endpoint == "" {
+			return fmt.Errorf("otel endpoint cannot be empty when enabled")
+		}
+
+		// Apply interval defaults
+		if export.OTEL.Interval.Read == 0 {
+			export.OTEL.Interval.Read = DefaultOTELReadInterval
+		}
+		if export.OTEL.Interval.Push == 0 {
+			export.OTEL.Interval.Push = DefaultOTELPushInterval
+		}
+
+		// Apply resource defaults
+		if export.OTEL.Resource == nil {
+			export.OTEL.Resource = make(map[string]string)
+		}
+		if _, exists := export.OTEL.Resource["service.name"]; !exists {
+			export.OTEL.Resource["service.name"] = DefaultServiceName
+		}
+		if _, exists := export.OTEL.Resource["service.version"]; !exists {
+			export.OTEL.Resource["service.version"] = DefaultServiceVersion
+		}
+	}
+
+	// Verify at least one exporter enabled
+	promEnabled := export.Prometheus != nil && export.Prometheus.Enabled
+	otelEnabled := export.OTEL != nil && export.OTEL.Enabled
+
+	if !promEnabled && !otelEnabled {
+		return fmt.Errorf("at least one exporter must be enabled")
 	}
 
 	return nil

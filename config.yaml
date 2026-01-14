@@ -1,7 +1,3 @@
-server:
-  port: 9090
-  path: /metrics
-
 simulation:
   clocks:
     clk_mqput:
@@ -35,3 +31,18 @@ metrics:
     type: gauge
     help: "Recent MQ PUT operations in window"
     value: v_mqput_count_reseted
+
+export:
+  prometheus:
+    enabled: true
+    port: 9090
+    path: /metrics
+
+  otel:
+    enabled: true
+    endpoint: localhost:4318
+    interval: 10s
+    resource:
+      service.name: obsbox
+      service.version: 0.1.0
+      deployment.environment: development

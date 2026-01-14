@@ -11,7 +11,8 @@ import (
 
 // Registry manages Prometheus metrics collection.
 type Registry struct {
-	registry *prometheus.Registry
+	registry  *prometheus.Registry
+	collector *Collector
 }
 
 // New creates a Prometheus registry with a custom collector.
@@ -56,11 +57,22 @@ func New(cfg *config.Config, gen *generator.Generator) (*Registry, error) {
 	reg.MustRegister(collector)
 
 	return &Registry{
-		registry: reg,
+		registry:  reg,
+		collector: collector,
 	}, nil
 }
 
 // PrometheusRegistry returns the underlying Prometheus registry.
 func (r *Registry) PrometheusRegistry() *prometheus.Registry {
 	return r.registry
+}
+
+// Read triggers value reads (used by OTEL exporter).
+func (r *Registry) Read() {
+	// Trigger collector to read values
+	// This happens automatically during Prometheus scrape,
+	// but OTEL needs explicit read triggers
+	for _, m := range r.collector.metrics {
+		_ = m.value.Value()
+	}
 }

@@ -4,17 +4,18 @@ import (
 	"fmt"
 
 	"github.com/neox5/obsbox/internal/config"
+	"github.com/neox5/obsbox/internal/exporter"
 	"github.com/neox5/obsbox/internal/generator"
 	"github.com/neox5/obsbox/internal/metric"
-	"github.com/neox5/obsbox/internal/server"
 )
 
 // App holds initialized application components.
 type App struct {
-	Config    *config.Config
-	Generator *generator.Generator
-	Metrics   *metric.Registry
-	Server    *server.Server
+	Config             *config.Config
+	Generator          *generator.Generator
+	Metrics            *metric.Registry
+	PrometheusExporter *exporter.PrometheusExporter
+	OTELExporter       *exporter.OTELExporter
 }
 
 // New initializes the application from a configuration file.
@@ -37,13 +38,34 @@ func New(configPath string) (*App, error) {
 		return nil, fmt.Errorf("failed to create metrics: %w", err)
 	}
 
-	// Create server
-	srv := server.New(cfg.Server.Port, cfg.Server.Path, metrics.PrometheusRegistry())
+	var promExporter *exporter.PrometheusExporter
+	var otelExporter *exporter.OTELExporter
+
+	// Create Prometheus exporter if enabled
+	if cfg.Export.Prometheus != nil && cfg.Export.Prometheus.Enabled {
+		promExporter = exporter.NewPrometheusExporter(
+			cfg.Export.Prometheus.Port,
+			cfg.Export.Prometheus.Path,
+			metrics,
+		)
+	}
+
+	// Create OTEL exporter if enabled
+	if cfg.Export.OTEL != nil && cfg.Export.OTEL.Enabled {
+		otelExporter, err = exporter.NewOTELExporter(
+			cfg.Export.OTEL,
+			metrics,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OTEL exporter: %w", err)
+		}
+	}
 
 	return &App{
-		Config:    cfg,
-		Generator: gen,
-		Metrics:   metrics,
-		Server:    srv,
+		Config:             cfg,
+		Generator:          gen,
+		Metrics:            metrics,
+		PrometheusExporter: promExporter,
+		OTELExporter:       otelExporter,
 	}, nil
 }

@@ -6,17 +6,75 @@ import (
 	"go.yaml.in/yaml/v4"
 )
 
+const (
+	// Prometheus defaults
+	DefaultPrometheusPort = 9090
+	DefaultPrometheusPath = "/metrics"
+
+	// OTEL defaults
+	DefaultOTELReadInterval = 1 * time.Second
+	DefaultOTELPushInterval = 1 * time.Second
+	DefaultServiceName      = "obsbox"
+	DefaultServiceVersion   = "dev"
+)
+
 // Config holds the complete application configuration.
 type Config struct {
-	Server     ServerConfig     `yaml:"server"`
+	Export     ExportConfig     `yaml:"export"`
 	Simulation SimulationConfig `yaml:"simulation"`
 	Metrics    []MetricConfig   `yaml:"metrics"`
 }
 
-// ServerConfig defines HTTP server settings.
-type ServerConfig struct {
-	Port int    `yaml:"port"`
-	Path string `yaml:"path"`
+// ExportConfig defines how metrics are exposed.
+type ExportConfig struct {
+	Prometheus *PrometheusExportConfig `yaml:"prometheus,omitempty"`
+	OTEL       *OTELExportConfig       `yaml:"otel,omitempty"`
+}
+
+// PrometheusExportConfig defines Prometheus pull endpoint settings.
+type PrometheusExportConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Port    int    `yaml:"port"`
+	Path    string `yaml:"path"`
+}
+
+// OTELExportConfig defines OTEL push settings.
+type OTELExportConfig struct {
+	Enabled  bool              `yaml:"enabled"`
+	Endpoint string            `yaml:"endpoint"`
+	Interval IntervalConfig    `yaml:"interval"`
+	Resource map[string]string `yaml:"resource,omitempty"`
+	Headers  map[string]string `yaml:"headers,omitempty"`
+}
+
+// IntervalConfig defines read and push intervals for OTEL.
+type IntervalConfig struct {
+	Read time.Duration
+	Push time.Duration
+}
+
+// UnmarshalYAML handles both simple (10s) and detailed (read/push) forms.
+func (i *IntervalConfig) UnmarshalYAML(value *yaml.Node) error {
+	// Try simple duration form first
+	var simple time.Duration
+	if err := value.Decode(&simple); err == nil {
+		i.Read = simple
+		i.Push = simple
+		return nil
+	}
+
+	// Fall back to detailed form
+	type intervalConfig struct {
+		Read time.Duration `yaml:"read"`
+		Push time.Duration `yaml:"push"`
+	}
+	var detailed intervalConfig
+	if err := value.Decode(&detailed); err != nil {
+		return err
+	}
+	i.Read = detailed.Read
+	i.Push = detailed.Push
+	return nil
 }
 
 // SimulationConfig defines the simulation domain configuration.
