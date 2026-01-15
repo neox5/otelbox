@@ -39,7 +39,7 @@ export:
     path: /metrics
 
   otel:
-    enabled: true
+    enabled: false
     endpoint: localhost:4318
     interval: 10s
     resource:

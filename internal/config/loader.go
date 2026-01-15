@@ -143,5 +143,10 @@ func validateExport(export *ExportConfig) error {
 		return fmt.Errorf("at least one exporter must be enabled")
 	}
 
+	// Verify only one exporter enabled (prevent read conflicts)
+	if promEnabled && otelEnabled {
+		return fmt.Errorf("only one exporter can be enabled at a time (prometheus or otel)")
+	}
+
 	return nil
 }
