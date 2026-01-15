@@ -2,7 +2,7 @@ simulation:
   clocks:
     clk_mqput:
       type: periodic
-      interval: 250ms
+      interval: 1s
 
   sources:
     src_mqput_events:
@@ -22,22 +22,27 @@ simulation:
       reset: on_read
 
 metrics:
-  - name: ibmmq_queue_mqput_count_total
+  - name:
+      prometheus: ibmmq_queue_mqput_count_total
+      otel: ibmmq.queue.mqput.count
     type: counter
-    help: "Total MQ PUT operations since start"
+    description: "Total MQ PUT operations since start"
     value: v_mqput_counter
+    attributes:
+      queue: QUEUE.1
+      qmgr: QM1
 
-  - name: ibmmq_queue_mqput_count_ratio
+  - name:
+      prometheus: ibmmq_queue_mqput_count_ratio
+      otel: ibmmq.queue.mqput.rate
     type: gauge
-    help: "Recent MQ PUT operations in window"
+    description: "Recent MQ PUT operations in window"
     value: v_mqput_count_reseted
+    attributes:
+      queue: QUEUE.1
+      qmgr: QM1
 
 export:
-  prometheus:
-    enabled: true
-    port: 9090
-    path: /metrics
-
   otel:
     enabled: false
     endpoint: localhost:4318
@@ -46,3 +51,8 @@ export:
       service.name: obsbox
       service.version: 0.1.0
       deployment.environment: development
+
+  prometheus:
+    enabled: true
+    port: 9090
+    path: /metrics

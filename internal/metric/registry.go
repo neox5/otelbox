@@ -19,14 +19,16 @@ func New(cfg *config.Config, gen *generator.Generator) (*Registry, error) {
 	for _, metricCfg := range cfg.Metrics {
 		val, exists := gen.GetValue(metricCfg.Value)
 		if !exists {
-			return nil, fmt.Errorf("value %q not found for metric %q", metricCfg.Value, metricCfg.Name)
+			return nil, fmt.Errorf("value %q not found for metric %q", metricCfg.Value, metricCfg.Name.GetPrometheusName())
 		}
 
 		metrics = append(metrics, Descriptor{
-			Name:  metricCfg.Name,
-			Type:  MetricType(metricCfg.Type),
-			Help:  metricCfg.Help,
-			Value: val,
+			PrometheusName: metricCfg.Name.GetPrometheusName(),
+			OTELName:       metricCfg.Name.GetOTELName(),
+			Type:           MetricType(metricCfg.Type),
+			Description:    metricCfg.Description,
+			Attributes:     metricCfg.Attributes,
+			Value:          val,
 		})
 	}
 

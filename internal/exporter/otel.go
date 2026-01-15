@@ -27,9 +27,10 @@ type OTELExporter struct {
 
 // instrument holds an OTEL observable instrument and its value reference.
 type instrument struct {
-	counter otelmetric.Int64ObservableCounter
-	gauge   otelmetric.Int64ObservableGauge
-	value   value.Value[int]
+	counter    otelmetric.Int64ObservableCounter
+	gauge      otelmetric.Int64ObservableGauge
+	value      value.Value[int]
+	attributes []attribute.KeyValue
 }
 
 // NewOTELExporter creates a new OTEL exporter.
@@ -81,35 +82,46 @@ func NewOTELExporter(cfg *config.OTELExportConfig, metrics *metric.Registry) (*O
 	// Register instruments for each metric
 	var instruments []instrument
 	for _, m := range metrics.Metrics() {
-		inst := instrument{value: m.Value}
+		// Convert attributes map to OTEL attributes
+		attrs := make([]attribute.KeyValue, 0, len(m.Attributes))
+		for key, val := range m.Attributes {
+			attrs = append(attrs, attribute.String(key, val))
+		}
+
+		inst := instrument{
+			value:      m.Value,
+			attributes: attrs,
+		}
 
 		switch m.Type {
 		case metric.MetricTypeCounter:
 			counter, err := meter.Int64ObservableCounter(
-				m.Name,
-				otelmetric.WithDescription(m.Help),
+				m.OTELName,
+				otelmetric.WithDescription(m.Description),
 			)
 			if err != nil {
-				return nil, fmt.Errorf("failed to create counter %q: %w", m.Name, err)
+				return nil, fmt.Errorf("failed to create counter %q: %w", m.OTELName, err)
 			}
 			inst.counter = counter
 
 		case metric.MetricTypeGauge:
 			gauge, err := meter.Int64ObservableGauge(
-				m.Name,
-				otelmetric.WithDescription(m.Help),
+				m.OTELName,
+				otelmetric.WithDescription(m.Description),
 			)
 			if err != nil {
-				return nil, fmt.Errorf("failed to create gauge %q: %w", m.Name, err)
+				return nil, fmt.Errorf("failed to create gauge %q: %w", m.OTELName, err)
 			}
 			inst.gauge = gauge
 		}
 
 		instruments = append(instruments, inst)
-		slog.Info("registered otel metric", "name", m.Name, "type", m.Type)
+		slog.Info("registered otel metric",
+			"name", m.OTELName,
+			"type", m.Type,
+			"attributes", len(attrs))
 	}
 
-	// Register callback for all instruments
 	// Collect all observables for callback registration
 	var observables []otelmetric.Observable
 	for _, inst := range instruments {
@@ -121,15 +133,18 @@ func NewOTELExporter(cfg *config.OTELExportConfig, metrics *metric.Registry) (*O
 		}
 	}
 
+	// Register callback with attributes
 	_, err = meter.RegisterCallback(
 		func(ctx context.Context, observer otelmetric.Observer) error {
 			for _, inst := range instruments {
 				val := int64(inst.value.Value()) // Triggers reset_on_read if configured
 				if inst.counter != nil {
-					observer.ObserveInt64(inst.counter, val)
+					observer.ObserveInt64(inst.counter, val,
+						otelmetric.WithAttributes(inst.attributes...))
 				}
 				if inst.gauge != nil {
-					observer.ObserveInt64(inst.gauge, val)
+					observer.ObserveInt64(inst.gauge, val,
+						otelmetric.WithAttributes(inst.attributes...))
 				}
 			}
 			return nil

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/neox5/obsbox/internal/metric"
@@ -23,9 +24,10 @@ type PrometheusExporter struct {
 
 // metricDescriptor holds metadata for a Prometheus metric.
 type metricDescriptor struct {
-	desc      *prometheus.Desc
-	valueType prometheus.ValueType
-	value     value.Value[int]
+	desc        *prometheus.Desc
+	valueType   prometheus.ValueType
+	value       value.Value[int]
+	labelValues []string
 }
 
 // collector implements prometheus.Collector to read simv values on scrape.
@@ -48,13 +50,35 @@ func NewPrometheusExporter(port int, path string, metrics *metric.Registry) *Pro
 			valueType = prometheus.GaugeValue
 		}
 
+		// Extract and sort label names for consistent ordering
+		var labelNames []string
+		for key := range m.Attributes {
+			labelNames = append(labelNames, key)
+		}
+		sort.Strings(labelNames)
+
+		// Build label values in same order
+		labelValues := make([]string, len(labelNames))
+		for i, name := range labelNames {
+			labelValues[i] = m.Attributes[name]
+		}
+
 		descriptors = append(descriptors, metricDescriptor{
-			desc:      prometheus.NewDesc(m.Name, m.Help, nil, nil),
-			valueType: valueType,
-			value:     m.Value,
+			desc: prometheus.NewDesc(
+				m.PrometheusName,
+				m.Description,
+				labelNames,
+				nil, // No constant labels
+			),
+			valueType:   valueType,
+			value:       m.Value,
+			labelValues: labelValues,
 		})
 
-		slog.Info("registered prometheus metric", "name", m.Name, "type", m.Type)
+		slog.Info("registered prometheus metric",
+			"name", m.PrometheusName,
+			"type", m.Type,
+			"labels", labelNames)
 	}
 
 	// Register collector
@@ -125,11 +149,12 @@ func (c *collector) Collect(ch chan<- prometheus.Metric) {
 		// Read value from simv (may trigger reset for reset_on_read)
 		val := float64(m.value.Value())
 
-		// Create and send metric with current value
+		// Create and send metric with current value and labels
 		metric, err := prometheus.NewConstMetric(
 			m.desc,
 			m.valueType,
 			val,
+			m.labelValues...,
 		)
 		if err != nil {
 			continue

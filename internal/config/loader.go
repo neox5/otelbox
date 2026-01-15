@@ -26,7 +26,7 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// validate checks configuration consistency.
+// validate orchestrates configuration validation.
 func validate(cfg *Config) error {
 	// Validate export configuration
 	if err := cfg.Export.Validate(); err != nil {
@@ -38,11 +38,9 @@ func validate(cfg *Config) error {
 		return err
 	}
 
-	// Validate metrics reference valid values
-	for _, metric := range cfg.Metrics {
-		if _, exists := cfg.Simulation.Values[metric.Value]; !exists {
-			return fmt.Errorf("metric %q references unknown value %q", metric.Name, metric.Value)
-		}
+	// Validate metrics configuration
+	if err := validateMetrics(cfg); err != nil {
+		return err
 	}
 
 	return nil

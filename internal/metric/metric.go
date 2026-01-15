@@ -12,8 +12,10 @@ const (
 
 // Descriptor holds protocol-agnostic metric metadata and value reference.
 type Descriptor struct {
-	Name  string
-	Type  MetricType
-	Help  string
-	Value value.Value[int]
+	PrometheusName string
+	OTELName       string
+	Type           MetricType
+	Description    string
+	Attributes     map[string]string
+	Value          value.Value[int]
 }
