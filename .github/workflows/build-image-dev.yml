@@ -1,0 +1,112 @@
+name: Build Development Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      push:
+        description: "Push to registry after build"
+        required: true
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: neox5/obsbox
+
+jobs:
+  build-dev-images:
+    name: Build Development Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build multi-platform image (amd64)
+        id: build-amd64
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: main-amd64
+          platforms: linux/amd64
+          containerfiles: ./Containerfile
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+
+      - name: Build multi-platform image (arm64)
+        id: build-arm64
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: main-arm64
+          platforms: linux/arm64
+          containerfiles: ./Containerfile
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+
+      - name: Log in to Container Registry
+        if: ${{ inputs.push }}
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push images to registry
+        if: ${{ inputs.push }}
+        run: |
+          # Push architecture-specific images
+          podman push ${{ steps.build-amd64.outputs.image }}:main-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-amd64
+
+          podman push ${{ steps.build-arm64.outputs.image }}:main-arm64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-arm64
+
+      - name: Create and push manifests
+        if: ${{ inputs.push }}
+        run: |
+          # Create manifest for main
+          podman manifest create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main
+          podman manifest add ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-amd64
+          podman manifest add ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-arm64
+          podman manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main
+
+          # Create manifest for latest (alias for main)
+          podman manifest create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          podman manifest add ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-amd64
+          podman manifest add ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-arm64
+          podman manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Summary
+        run: |
+          echo "✅ Development images built successfully"
+          echo ""
+          echo "Version: ${{ steps.version.outputs.version }}"
+          echo "Platforms: linux/amd64, linux/arm64"
+          if [ "${{ inputs.push }}" = "true" ]; then
+            echo ""
+            echo "Published tags:"
+            echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main"
+            echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          else
+            echo ""
+            echo "Images built locally (not pushed to registry)"
+          fi

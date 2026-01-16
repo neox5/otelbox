@@ -1,0 +1,72 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-binaries:
+    name: Release Binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Build binaries
+        run: make build
+
+      - name: Verify binary version
+        run: |
+          # Get tag name
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "Tag: $TAG_NAME"
+
+          # Test host-native binary
+          HOST_GOOS=$(go env GOOS)
+          HOST_GOARCH=$(go env GOARCH)
+          HOST_BIN="dist/obsbox-${HOST_GOOS}-${HOST_GOARCH}"
+
+          if [ "$HOST_GOOS" = "windows" ]; then
+            HOST_BIN="${HOST_BIN}.exe"
+          fi
+
+          if [ ! -x "$HOST_BIN" ]; then
+            echo "ERROR: host binary not found: $HOST_BIN"
+            exit 1
+          fi
+
+          # Check version
+          VERSION_OUTPUT=$("$HOST_BIN" --version)
+          BINARY_VERSION="${VERSION_OUTPUT##* }"
+
+          echo "Binary version: $BINARY_VERSION"
+
+          if [ "$BINARY_VERSION" != "$TAG_NAME" ]; then
+            echo "ERROR: version mismatch (expected $TAG_NAME, got $BINARY_VERSION)"
+            exit 1
+          fi
+
+          echo "✅ Version verification passed"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false

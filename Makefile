@@ -4,9 +4,10 @@ MODULE_PATH := github.com/neox5/obsbox
 DIST_DIR    := dist
 
 # Container configuration
-IMAGE_NAME     := obsbox
-IMAGE_TAG      := latest
-CONTAINER_NAME := obsbox
+IMAGE_REGISTRY  := ghcr.io
+IMAGE_NAMESPACE := neox5
+IMAGE_NAME      := obsbox
+IMAGE_TAG       := latest
 
 PLATFORMS := \
 	linux/amd64 \
@@ -59,18 +60,28 @@ build-local: clean
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o "$(DIST_DIR)/$(BINARY)" $(CMD_PKG)
 
 # ---------------------------------------------------------------------
-# Container image build
+# Container image build (local development with Podman)
 # ---------------------------------------------------------------------
 
 build-image: ## Build container image with Podman
-	podman build -t $(IMAGE_NAME):$(IMAGE_TAG) -f Containerfile .
+	podman build \
+		--build-arg VERSION=$(VERSION) \
+		-t $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG) \
+		-f Containerfile .
+
+build-image-multiarch: ## Build multi-platform container image with Podman
+	podman build \
+		--platform linux/amd64,linux/arm64 \
+		--build-arg VERSION=$(VERSION) \
+		-t $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG) \
+		-f Containerfile .
 
 run-container: ## Run container with config volume mount
 	podman run --rm \
-		--name $(CONTAINER_NAME) \
+		--name $(BINARY) \
 		-v $(PWD)/config.yaml:/config/config.yaml:ro \
 		-p 9090:9090 \
-		$(IMAGE_NAME):$(IMAGE_TAG) \
+		$(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG) \
 		-config /config/config.yaml
 
 # ---------------------------------------------------------------------
@@ -105,4 +116,4 @@ clean:
 
 help: ## Display this help message
 	@echo "Available targets:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
