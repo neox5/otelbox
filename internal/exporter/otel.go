@@ -2,7 +2,6 @@ package exporter
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -10,10 +9,8 @@ import (
 	"github.com/neox5/obsbox/internal/metric"
 	"github.com/neox5/simv/value"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/resource"
 )
 
 // OTELExporter pushes metrics to an OTEL collector.
@@ -38,132 +35,31 @@ func NewOTELExporter(
 	cfg *config.OTELExportConfig,
 	metrics *metric.Registry,
 ) (*OTELExporter, error) {
-	// Create resource with configured attributes
-	attrs := make([]attribute.KeyValue, 0, len(cfg.Resource))
-	for k, v := range cfg.Resource {
-		attrs = append(attrs, attribute.String(k, v))
-	}
-	res, err := resource.New(
-		context.Background(),
-		resource.WithAttributes(attrs...),
-	)
+	// Create resource
+	res, err := createOTELResource(cfg.Resource)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create resource: %w", err)
+		return nil, err
 	}
-
-	// Create OTLP HTTP exporter
-	opts := []otlpmetrichttp.Option{
-		otlpmetrichttp.WithEndpoint(cfg.Endpoint),
-		otlpmetrichttp.WithInsecure(), // TODO: Add TLS support later
-	}
-
-	// Add custom headers
-	if len(cfg.Headers) > 0 {
-		opts = append(opts, otlpmetrichttp.WithHeaders(cfg.Headers))
-	}
-
-	exporter, err := otlpmetrichttp.New(context.Background(), opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create OTLP exporter: %w", err)
-	}
-
-	// Create periodic reader with push interval
-	reader := sdkmetric.NewPeriodicReader(
-		exporter,
-		sdkmetric.WithInterval(cfg.Interval.Push),
-	)
 
 	// Create meter provider
-	meterProvider := sdkmetric.NewMeterProvider(
-		sdkmetric.WithResource(res),
-		sdkmetric.WithReader(reader),
-	)
+	meterProvider, err := createMeterProvider(cfg, res)
+	if err != nil {
+		return nil, err
+	}
 
 	// Create meter
 	meter := meterProvider.Meter("obsbox")
 
+	// Create exporter
 	e := &OTELExporter{
 		config:        cfg,
 		meterProvider: meterProvider,
 		meter:         meter,
 	}
 
-	// Register instruments for each metric
-	var instruments []instrument
-	for _, m := range metrics.Metrics() {
-		// Convert attributes map to OTEL attributes
-		attrs := make([]attribute.KeyValue, 0, len(m.Attributes))
-		for key, val := range m.Attributes {
-			attrs = append(attrs, attribute.String(key, val))
-		}
-
-		inst := instrument{
-			value:      m.Value,
-			attributes: attrs,
-		}
-
-		switch m.Type {
-		case metric.MetricTypeCounter:
-			counter, err := meter.Int64ObservableCounter(
-				m.OTELName,
-				otelmetric.WithDescription(m.Description),
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create counter %q: %w", m.OTELName, err)
-			}
-			inst.counter = counter
-
-		case metric.MetricTypeGauge:
-			gauge, err := meter.Int64ObservableGauge(
-				m.OTELName,
-				otelmetric.WithDescription(m.Description),
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create gauge %q: %w", m.OTELName, err)
-			}
-			inst.gauge = gauge
-		}
-
-		instruments = append(instruments, inst)
-		slog.Info("registered otel metric",
-			"name", m.OTELName,
-			"type", m.Type,
-			"attributes", len(attrs))
-	}
-
-	e.instruments = instruments
-
-	// Collect all observables for callback registration
-	var observables []otelmetric.Observable
-	for _, inst := range instruments {
-		if inst.counter != nil {
-			observables = append(observables, inst.counter)
-		}
-		if inst.gauge != nil {
-			observables = append(observables, inst.gauge)
-		}
-	}
-
-	// Register callback with attributes
-	_, err = meter.RegisterCallback(
-		func(ctx context.Context, observer otelmetric.Observer) error {
-			for _, inst := range instruments {
-				val := int64(inst.value.Value()) // Triggers reset_on_read if configured
-				if inst.counter != nil {
-					observer.ObserveInt64(inst.counter, val,
-						otelmetric.WithAttributes(inst.attributes...))
-				}
-				if inst.gauge != nil {
-					observer.ObserveInt64(inst.gauge, val,
-						otelmetric.WithAttributes(inst.attributes...))
-				}
-			}
-			return nil
-		},
-		observables...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to register callback: %w", err)
+	// Register instruments
+	if err := registerOTELInstruments(e, metrics); err != nil {
+		return nil, err
 	}
 
 	return e, nil
