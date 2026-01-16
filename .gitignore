@@ -1,2 +1,5 @@
+# build files
+dist
+
 # snapshot files
 **/*.snp
