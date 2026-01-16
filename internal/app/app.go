@@ -47,6 +47,8 @@ func New(configPath string) (*App, error) {
 			cfg.Export.Prometheus.Port,
 			cfg.Export.Prometheus.Path,
 			metrics,
+			cfg.Settings.InternalMetrics.Enabled,
+			cfg.Settings.InternalMetrics.Format,
 		)
 	}
 
@@ -55,6 +57,8 @@ func New(configPath string) (*App, error) {
 		otelExporter, err = exporter.NewOTELExporter(
 			cfg.Export.OTEL,
 			metrics,
+			cfg.Settings.InternalMetrics.Enabled,
+			cfg.Settings.InternalMetrics.Format,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create OTEL exporter: %w", err)

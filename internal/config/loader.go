@@ -28,6 +28,11 @@ func Load(path string) (*Config, error) {
 
 // validate orchestrates configuration validation.
 func validate(cfg *Config) error {
+	// Validate settings configuration
+	if err := cfg.Settings.Validate(); err != nil {
+		return err
+	}
+
 	// Validate export configuration
 	if err := cfg.Export.Validate(); err != nil {
 		return err

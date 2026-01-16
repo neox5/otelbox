@@ -55,3 +55,8 @@ export:
     enabled: true
     port: 9090
     path: /metrics
+
+settings:
+  internal_metrics:
+    enabled: true
+    format: native
