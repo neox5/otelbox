@@ -6,10 +6,14 @@ Built on [simv](https://github.com/neox5/simv) for guaranteed mathematical consi
 
 ## Quick Start
 
-Run with Podman:
-
 ```bash
+# Run with default configuration
 podman run -p 9090:9090 ghcr.io/neox5/obsbox:latest
+
+# Run with custom configuration
+podman run -p 9090:9090 \
+  -v $(pwd)/custom-config.yaml:/config/config.yaml:ro \
+  ghcr.io/neox5/obsbox:latest
 ```
 
 Verify it's working:
@@ -57,51 +61,18 @@ Requires Go 1.25+:
 go install github.com/neox5/obsbox/cmd/obsbox@latest
 ```
 
-## Basic Usage
-
-### Running with Default Configuration
-
-The default configuration generates IBM MQ queue metrics:
-
-**Podman:**
-
-```bash
-podman run -p 9090:9090 ghcr.io/neox5/obsbox:latest
-```
-
-**Binary:**
-
-```bash
-./obsbox
-```
-
-Access metrics at `http://localhost:9090/metrics`
-
-### Running with Custom Configuration
-
-Mount your configuration file:
-
-**Podman:**
-
-```bash
-podman run -p 9090:9090 \
-  -v $(pwd)/custom-config.yaml:/config/config.yaml:ro \
-  ghcr.io/neox5/obsbox:latest \
-  -config /config/config.yaml
-```
-
-**Binary:**
-
-```bash
-./obsbox -config custom-config.yaml
-```
-
-### CLI Flags
+## CLI Flags
 
 ```
--config <path>    Path to configuration file (default: config.yaml)
+-config <path>    Path to configuration file (default: examples/default.yaml for binary, /config/config.yaml for container)
 --version         Print version and exit
 ```
+
+## Examples
+
+See `examples/` directory for configuration examples:
+
+- `default.yaml` - Simple counter metric (used as container default)
 
 ## Configuration Guide
 
