@@ -53,6 +53,7 @@ jobs:
           TAGS="$TAGS ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major_minor }}"
           TAGS="$TAGS ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}"
           TAGS="$TAGS ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stable"
+          TAGS="$TAGS ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
 
       - name: Build multi-platform image (amd64)
@@ -135,6 +136,14 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}-arm64
           podman manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stable
 
+          # Create manifest for latest
+          podman manifest create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          podman manifest add ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}-amd64
+          podman manifest add ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}-arm64
+          podman manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
       - name: Summary
         run: |
           echo "✅ Multi-platform images built and pushed successfully"
@@ -145,5 +154,6 @@ jobs:
           echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major_minor }}"
           echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}"
           echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stable"
+          echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
           echo ""
           echo "Platforms: linux/amd64, linux/arm64"
