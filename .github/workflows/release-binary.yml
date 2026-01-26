@@ -63,7 +63,30 @@ jobs:
 
           echo "✅ Version verification passed"
 
-      - name: Create GitHub Release
+      - name: Extract tag name
+        id: tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Check for release notes
+        id: notes
+        run: |
+          if [ -f ".release-notes/${{ steps.tag.outputs.tag }}.md" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release with notes
+        if: steps.notes.outputs.exists == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          body_path: .release-notes/${{ steps.tag.outputs.tag }}.md
+          draft: false
+          prerelease: false
+
+      - name: Create GitHub Release with auto-generated notes
+        if: steps.notes.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
