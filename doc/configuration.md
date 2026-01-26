@@ -55,6 +55,17 @@ export:
 
 The simulation section defines how values are generated using the simv library.
 
+#### Seed
+
+Optional seed for reproducible simulations:
+
+```yaml
+simulation:
+  seed: 12345
+```
+
+When omitted, a time-based seed is used (logged at startup for reproduction).
+
 #### Clocks
 
 Time sources driving value updates:
@@ -89,16 +100,10 @@ Derived values with transforms and views:
 
 ```yaml
 values:
-  # Create from source
   <name>:
     source: <source_name>
     transforms: [<transform>...]
-
-  # Derive from existing value
-  <name>:
-    clone: <value_name>
-    transforms: [<transform>...]  # Optional: extend transforms
-    reset: on_read                # Optional: reset behavior
+    reset: on_read # Optional
 ```
 
 **Available Transforms:**
@@ -217,6 +222,8 @@ Full-featured configuration showing all current capabilities:
 
 ```yaml
 simulation:
+  seed: 12345
+
   clocks:
     clk_mqput:
       type: periodic
@@ -235,7 +242,8 @@ simulation:
       transforms: [accumulate]
 
     v_mqput_count_reseted:
-      clone: v_mqput_counter
+      source: src_mqput_events
+      transforms: [accumulate]
       reset: on_read
 
 metrics:
@@ -268,7 +276,7 @@ export:
     interval: 10s
     resource:
       service.name: obsbox
-      service.version: 0.1.0
+      service.version: 0.2.0
       deployment.environment: development
 
   prometheus:
@@ -284,10 +292,11 @@ settings:
 
 This configuration demonstrates:
 
+- Reproducible simulations with explicit seed
 - Multiple metrics from the same source (coherence guarantee)
 - Counter and gauge representations of the same data
 - Protocol-specific naming (Prometheus vs OTEL)
-- Value derivation (cloning with reset behavior)
+- Value derivation with reset behavior
 - Metric attributes/labels
 - Both Prometheus and OTEL export configuration
 - Transport selection for OTEL (gRPC or HTTP)
@@ -296,7 +305,7 @@ This configuration demonstrates:
 
 ### Adding Multiple Metrics
 
-Reference the same value from multiple metric definitions to create coherent counter/gauge pairs:
+Reference the same source from multiple value definitions to create coherent counter/gauge pairs:
 
 ```yaml
 values:
@@ -305,7 +314,8 @@ values:
     transforms: [accumulate]
 
   recent_requests:
-    clone: total_requests
+    source: request_events
+    transforms: [accumulate]
     reset: on_read
 
 metrics:

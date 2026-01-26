@@ -15,6 +15,22 @@ YAML format with four top-level sections:
 
 Built on [simv](https://github.com/neox5/simv) library for value generation and transformation.
 
+### Seed
+
+Optional seed configuration for reproducible simulations.
+
+```yaml
+simulation:
+  seed: <uint64>
+```
+
+**Parameters:**
+
+- `seed` (uint64, optional) - Master seed for random number generation
+  - When omitted, uses time-based seed (logged at startup)
+  - Same seed produces identical value sequences across runs
+  - Example: `seed: 12345`
+
 ### Clocks
 
 Time sources driving value updates.
@@ -65,19 +81,13 @@ values:
   <name>:
     source: <source_name>
     transforms: [<transform>...]
-
-  <name>:
-    clone: <value_name>
-    transforms: [<transform>...]
     reset: <reset_config>
 ```
 
 **Parameters:**
 
-- `source` (string, mutually exclusive with clone) - Source reference
+- `source` (string, required) - Source reference
   - Must reference existing source name
-- `clone` (string, mutually exclusive with source) - Base value reference
-  - Must reference existing value name
 - `transforms` (array[transform], optional) - Transform pipeline
   - Applied in order
   - Available transforms: `accumulate`
