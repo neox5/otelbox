@@ -36,7 +36,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 
 ```bash
 # Linux (amd64)
-wget https://github.com/neox5/obsbox/releases/download/v0.1.0/obsbox-linux-amd64
+wget https://github.com/neox5/obsbox/releases/download/v0.2.0/obsbox-linux-amd64
 chmod +x obsbox-linux-amd64
 ./obsbox-linux-amd64 --version
 ```
@@ -44,7 +44,7 @@ chmod +x obsbox-linux-amd64
 Verify checksums:
 
 ```bash
-wget https://github.com/neox5/obsbox/releases/download/v0.1.0/obsbox-linux-amd64.sha256
+wget https://github.com/neox5/obsbox/releases/download/v0.2.0/obsbox-linux-amd64.sha256
 sha256sum -c obsbox-linux-amd64.sha256
 ```
 
@@ -68,7 +68,7 @@ obsbox --version         Print version and exit
 Minimal configuration generating a single counter metric:
 
 ```yaml
-simulation:
+instances:
   clocks:
     tick:
       type: periodic
@@ -77,20 +77,23 @@ simulation:
   sources:
     events:
       type: random_int
-      clock: tick
+      clock:
+        instance: tick
       min: 0
       max: 10
 
   values:
     total_events:
-      source: events
+      source:
+        instance: events
       transforms: [accumulate]
 
 metrics:
   - name: app_events_total
     type: counter
     description: "Total events processed"
-    value: total_events
+    value:
+      instance: total_events
     attributes:
       service: myapp
 
@@ -101,7 +104,74 @@ export:
     path: /metrics
 ```
 
-See `examples/` directory for more configuration examples.
+More advanced example with templates and instances:
+
+```yaml
+templates:
+  clocks:
+    tick_1s:
+      type: periodic
+      interval: 1s
+
+  sources:
+    base_events:
+      type: random_int
+      clock:
+        template: tick_1s
+      min: 0
+      max: 100
+
+instances:
+  clocks:
+    main_tick:
+      type: periodic
+      interval: 1s
+
+  sources:
+    shared_source:
+      type: random_int
+      clock:
+        instance: main_tick
+      min: 0
+      max: 50
+
+metrics:
+  # Using shared instance for coherent counter/gauge pair
+  - name: events_total
+    type: counter
+    description: "Total events"
+    value:
+      source:
+        instance: shared_source
+      transforms: [accumulate]
+
+  - name: events_current
+    type: gauge
+    description: "Recent events"
+    value:
+      source:
+        instance: shared_source
+      transforms: [accumulate]
+      reset: on_read
+
+  # Using template with override
+  - name: requests_total
+    type: counter
+    description: "Total requests"
+    value:
+      source:
+        template: base_events
+        max: 200 # Override template value
+      transforms: [accumulate]
+
+export:
+  prometheus:
+    enabled: true
+    port: 9090
+    path: /metrics
+```
+
+See `examples/` directory and documentation for more configuration patterns.
 
 ## Documentation
 

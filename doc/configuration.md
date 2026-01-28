@@ -4,10 +4,11 @@ Complete guide to configuring obsbox for telemetry signal generation.
 
 ## Configuration File Structure
 
-obsbox uses YAML configuration files with four main sections:
+obsbox uses YAML configuration files with five main sections:
 
-- **simulation** - Defines value generation using [simv](https://github.com/neox5/simv)
-- **metrics** - Maps simulation values to exposed metrics
+- **templates** - Reusable definitions with override support
+- **instances** - Named, shared objects
+- **metrics** - Maps values to exposed metrics
 - **export** - Configures metric exposition (Prometheus, OTEL)
 - **settings** - Application settings
 
@@ -16,7 +17,7 @@ obsbox uses YAML configuration files with four main sections:
 Minimal configuration generating a single counter metric:
 
 ```yaml
-simulation:
+instances:
   clocks:
     tick:
       type: periodic
@@ -25,20 +26,23 @@ simulation:
   sources:
     events:
       type: random_int
-      clock: tick
+      clock:
+        instance: tick
       min: 0
       max: 10
 
   values:
     total_events:
-      source: events
+      source:
+        instance: events
       transforms: [accumulate]
 
 metrics:
   - name: app_events_total
     type: counter
     description: "Total events processed"
-    value: total_events
+    value:
+      instance: total_events
     attributes:
       service: myapp
 
@@ -51,76 +55,168 @@ export:
 
 ## Configuration Sections
 
-### Simulation Domain
+### Templates & Instances
 
-The simulation section defines how values are generated using the simv library.
+Templates and instances provide reusable configuration definitions with different characteristics:
+
+**Templates** are reusable definitions that can be referenced with overrides:
+
+- Define once, reference many times with variations
+- Override specific fields when referenced
+- Useful for creating variations on common patterns
+- Example: Base source template with different min/max values per metric
+
+**Instances** are concrete, named objects that can be shared across references:
+
+- Reference by name without modification
+- Guarantee identical behavior across all references
+- Useful for shared clocks or sources
+- Example: Single clock instance driving multiple sources
+
+#### Templates Section
+
+Templates support hierarchical definitions - templates can reference other templates:
+
+```yaml
+templates:
+  clocks:
+    tick_1s:
+      type: periodic
+      interval: 1s
+
+    tick_fast:
+      type: periodic
+      interval: 100ms
+
+  sources:
+    base_events:
+      type: random_int
+      clock:
+        template: tick_1s
+      min: 0
+      max: 100
+
+  values:
+    counter_value:
+      source:
+        template: base_events
+      transforms: [accumulate]
+
+  metrics:
+    counter_metric:
+      type: counter
+      value:
+        template: counter_value
+```
+
+**Template References with Overrides:**
+Templates can be referenced and specific fields overridden:
+
+```yaml
+metrics:
+  - name: events_total
+    type: counter
+    description: "Total events"
+    value:
+      template: counter_value
+      source:
+        template: base_events
+        max: 50 # Override max from template
+    attributes:
+      service: myapp
+```
+
+#### Instances Section
+
+Instances define concrete, shareable objects:
+
+```yaml
+instances:
+  clocks:
+    main_tick:
+      type: periodic
+      interval: 1s
+
+    fast_tick:
+      type: periodic
+      interval: 100ms
+
+  sources:
+    event_source:
+      type: random_int
+      clock:
+        instance: main_tick # Reference clock instance
+      min: 0
+      max: 100
+
+  values:
+    total_events:
+      source:
+        instance: event_source # Reference source instance
+      transforms: [accumulate]
+```
+
+**Instance References (No Overrides):**
+Instances are referenced by name and cannot be modified:
+
+```yaml
+metrics:
+  - name: events_total
+    type: counter
+    description: "Total events"
+    value:
+      instance: total_events # Reference value instance
+    attributes:
+      service: myapp
+```
+
+#### Reference Types
+
+Configuration fields that reference other objects support three forms:
+
+**1. Instance Reference:**
+
+```yaml
+value:
+  instance: total_events # Reference named instance
+```
+
+**2. Template Reference (with optional overrides):**
+
+```yaml
+value:
+  template: counter_value # Reference template
+  reset: on_read # Override reset behavior
+```
+
+**3. Inline Definition:**
+
+```yaml
+value:
+  source:
+    type: random_int
+    clock:
+      type: periodic
+      interval: 1s
+    min: 0
+    max: 100
+  transforms: [accumulate]
+```
 
 #### Seed
 
-Optional seed for reproducible simulations:
+Optional seed configuration for reproducible simulations:
 
 ```yaml
-simulation:
+settings:
   seed: 12345
 ```
 
 When omitted, a time-based seed is used (logged at startup for reproduction).
 
-#### Clocks
-
-Time sources driving value updates:
-
-```yaml
-clocks:
-  <name>:
-    type: periodic
-    interval: <duration> # e.g., 1s, 500ms, 2m
-```
-
-Multiple clocks can be defined with different intervals for independent metric groups.
-
-#### Sources
-
-Raw value generators attached to clocks:
-
-```yaml
-sources:
-  <name>:
-    type: random_int
-    clock: <clock_name>
-    min: <int>
-    max: <int>
-```
-
-Each source references a clock that drives its update schedule.
-
-#### Values
-
-Derived values with transforms and views:
-
-```yaml
-values:
-  <name>:
-    source: <source_name>
-    transforms: [<transform>...]
-    reset: on_read # Optional
-```
-
-**Available Transforms:**
-
-- `accumulate` - Running sum (counter semantics)
-
-**Reset Behavior:**
-
-- `on_read` - Reset to zero after each read (gauge window semantics)
-- `{type: on_read, value: <int>}` - Reset to specific value
-
-**Coherence Guarantee:**
-Multiple values derived from the same source maintain mathematical consistency. Metrics referencing these values produce coherent signals.
-
 ### Metrics Definition
 
-Maps simulation values to exposed metrics:
+Maps values to exposed metrics:
 
 ```yaml
 metrics:
@@ -130,7 +226,7 @@ metrics:
       otel: <otel_name>
     type: counter | gauge
     description: <help_text>
-    value: <value_name>               # Reference to simulation value
+    value: <value_reference>          # Instance/template reference or inline
     attributes:                       # Labels (Prometheus) / Attributes (OTEL)
       <key>: <value>
 ```
@@ -144,6 +240,14 @@ metrics:
 
 - Simple form: Same name for Prometheus and OTEL
 - Full form: Protocol-specific names (e.g., `app.events.total` vs `app_events_total`)
+
+**Value References:**
+
+Metrics reference values in three ways:
+
+1. **Instance reference** - Points to named instance
+2. **Template reference** - Uses template with optional overrides
+3. **Inline definition** - Complete value definition in metric
 
 **Attributes:**
 
@@ -197,6 +301,15 @@ export:
 
 ### Settings
 
+#### Seed
+
+Optional seed for reproducible simulations:
+
+```yaml
+settings:
+  seed: <uint64>
+```
+
 #### Internal Metrics
 
 obsbox self-monitoring metrics:
@@ -216,73 +329,114 @@ settings:
 
 **Default:** `enabled: false`, `format: native`
 
-## Complete Example (IBM MQ Scenario)
+## Complete Example
 
-Full-featured configuration showing all current capabilities:
+Full-featured configuration showing templates, instances, and inline definitions:
 
 ```yaml
-simulation:
+settings:
   seed: 12345
 
+templates:
   clocks:
-    clk_mqput:
+    tick_1s:
       type: periodic
       interval: 1s
 
   sources:
-    src_mqput_events:
+    base_events:
       type: random_int
-      clock: clk_mqput
+      clock:
+        template: tick_1s
       min: 0
-      max: 10
+      max: 100
 
   values:
-    v_mqput_counter:
-      source: src_mqput_events
+    counter_value:
+      source:
+        template: base_events
       transforms: [accumulate]
 
-    v_mqput_count_reseted:
-      source: src_mqput_events
+instances:
+  clocks:
+    main_tick:
+      type: periodic
+      interval: 1s
+
+  sources:
+    shared_source:
+      type: random_int
+      clock:
+        instance: main_tick
+      min: 0
+      max: 50
+
+  values:
+    shared_counter:
+      source:
+        instance: shared_source
       transforms: [accumulate]
-      reset: on_read
 
 metrics:
+  # Metric using instance
   - name:
-      prometheus: ibmmq_queue_mqput_count_total
-      otel: ibmmq.queue.mqput.count
+      prometheus: app_events_total
+      otel: app.events.total
     type: counter
-    description: "Total MQ PUT operations since start"
-    value: v_mqput_counter
+    description: "Total events from shared instance"
+    value:
+      instance: shared_counter
     attributes:
-      queue: QUEUE.1
-      qmgr: QM1
+      source: instance
 
+  # Metric using template with overrides
   - name:
-      prometheus: ibmmq_queue_mqput_count_ratio
-      otel: ibmmq.queue.mqput.rate
-    type: gauge
-    description: "Recent MQ PUT operations in window"
-    value: v_mqput_count_reseted
+      prometheus: app_requests_total
+      otel: app.requests.total
+    type: counter
+    description: "Total requests from template"
+    value:
+      template: counter_value
+      source:
+        template: base_events
+        max: 200  # Override max
     attributes:
-      queue: QUEUE.1
-      qmgr: QM1
+      source: template
+
+  # Metric with inline definition
+  - name:
+      prometheus: app_errors_total
+      otel: app.errors.total
+    type: counter
+    description: "Total errors from inline definition"
+    value:
+      source:
+        type: random_int
+        clock:
+          type: periodic
+          interval: 500ms
+        min: 0
+        max: 10
+      transforms: [accumulate]
+    attributes:
+      source: inline
 
 export:
-  otel:
-    enabled: true
-    transport: grpc # grpc (default) or http
-    host: localhost # default: localhost
-    port: 4317 # default: 4317 (grpc), 4318 (http)
-    interval: 10s
-    resource:
-      service.name: obsbox
-      service.version: 0.2.0
-      deployment.environment: development
-
   prometheus:
     enabled: true
     port: 9090
     path: /metrics
+
+  otel:
+    enabled: false
+    transport: grpc
+    host: localhost
+    port: 4317
+    interval: 10s
+    resource:
+      service.name: obsbox
+      service.version: 0.3.0
+      deployment.environment: development
 
 settings:
   internal_metrics:
@@ -290,79 +444,154 @@ settings:
     format: native
 ```
 
-This configuration demonstrates:
-
-- Reproducible simulations with explicit seed
-- Multiple metrics from the same source (coherence guarantee)
-- Counter and gauge representations of the same data
-- Protocol-specific naming (Prometheus vs OTEL)
-- Value derivation with reset behavior
-- Metric attributes/labels
-- Both Prometheus and OTEL export configuration
-- Transport selection for OTEL (gRPC or HTTP)
-
 ## Common Patterns
 
-### Adding Multiple Metrics
+### Template with Variations
 
-Reference the same source from multiple value definitions to create coherent counter/gauge pairs:
+Define a base template and create variations with overrides:
 
 ```yaml
-values:
-  total_requests:
-    source: request_events
-    transforms: [accumulate]
-
-  recent_requests:
-    source: request_events
-    transforms: [accumulate]
-    reset: on_read
+templates:
+  sources:
+    base_load:
+      type: random_int
+      clock:
+        type: periodic
+        interval: 1s
+      min: 0
+      max: 100
 
 metrics:
-  - name: http_requests_total
+  - name: low_load_total
     type: counter
-    value: total_requests
+    value:
+      source:
+        template: base_load
+        max: 50 # Low load variant
+      transforms: [accumulate]
 
-  - name: http_requests_current
+  - name: high_load_total
+    type: counter
+    value:
+      source:
+        template: base_load
+        max: 200 # High load variant
+      transforms: [accumulate]
+```
+
+### Shared Clock Pattern
+
+Multiple sources share a single clock instance:
+
+```yaml
+instances:
+  clocks:
+    main_tick:
+      type: periodic
+      interval: 1s
+
+  sources:
+    source_a:
+      type: random_int
+      clock:
+        instance: main_tick # Shared clock
+      min: 0
+      max: 100
+
+    source_b:
+      type: random_int
+      clock:
+        instance: main_tick # Same clock instance
+      min: 0
+      max: 50
+```
+
+### Coherent Counter/Gauge Pairs
+
+Create counter and gauge from same source for mathematical coherence:
+
+```yaml
+instances:
+  sources:
+    events:
+      type: random_int
+      clock:
+        type: periodic
+        interval: 1s
+      min: 0
+      max: 100
+
+  values:
+    total_events:
+      source:
+        instance: events
+      transforms: [accumulate]
+
+    recent_events:
+      source:
+        instance: events # Same source guarantees coherence
+      transforms: [accumulate]
+      reset: on_read
+
+metrics:
+  - name: events_total
+    type: counter
+    value:
+      instance: total_events
+
+  - name: events_current
     type: gauge
-    value: recent_requests
+    value:
+      instance: recent_events
 ```
 
-### Changing Update Intervals
+### Multiple Independent Update Frequencies
 
-Modify clock interval in `simulation.clocks` section:
+Different metric groups with independent clocks:
 
 ```yaml
-clocks:
-  fast_tick:
-    type: periodic
-    interval: 100ms # 10 updates per second
+instances:
+  clocks:
+    fast_tick:
+      type: periodic
+      interval: 100ms
 
-  slow_tick:
-    type: periodic
-    interval: 5s # 1 update every 5 seconds
+    slow_tick:
+      type: periodic
+      interval: 5s
+
+  sources:
+    api_requests:
+      type: random_int
+      clock:
+        instance: fast_tick
+      min: 0
+      max: 100
+
+    batch_jobs:
+      type: random_int
+      clock:
+        instance: slow_tick
+      min: 0
+      max: 10
 ```
 
-### Multiple Independent Clocks
+### Inline Definitions for One-Off Metrics
 
-Define multiple named clocks with different intervals for independent metric groups:
+Use inline definitions when metric is unique and won't be reused:
 
 ```yaml
-clocks:
-  api_clock:
-    type: periodic
-    interval: 1s
-
-  batch_clock:
-    type: periodic
-    interval: 30s
-
-sources:
-  api_requests:
-    clock: api_clock
-    # ...
-
-  batch_jobs:
-    clock: batch_clock
-    # ...
+metrics:
+  - name: unique_metric_total
+    type: counter
+    description: "One-off metric"
+    value:
+      source:
+        type: random_int
+        clock:
+          type: periodic
+          interval: 2s
+        min: 0
+        max: 25
+      transforms: [accumulate]
 ```
