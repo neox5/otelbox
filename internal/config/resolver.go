@@ -116,3 +116,11 @@ func (r *Resolver) Resolve() (*Config, error) {
 		Settings: r.raw.Settings,
 	}, nil
 }
+
+// getStringValue safely dereferences a string pointer
+func getStringValue(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}

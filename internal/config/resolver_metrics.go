@@ -2,6 +2,46 @@ package config
 
 import "fmt"
 
+// resolveTemplateMetrics resolves metric templates (may reference value templates)
+func (r *Resolver) resolveTemplateMetrics() error {
+	for name, raw := range r.raw.Templates.Metrics {
+		if err := r.registerName(name, "template metric"); err != nil {
+			return err
+		}
+
+		ctx := resolveContext{}.push("metric template", name)
+
+		resolved := MetricConfig{
+			Type: MetricType(raw.Type),
+		}
+
+		// Resolve value reference if present
+		if raw.Value != nil {
+			value, err := r.resolveValueFromReference(raw.Value, ctx)
+			if err != nil {
+				return err
+			}
+			resolved.Value = value
+		}
+
+		// Copy attributes (can be nil)
+		if raw.Attributes != nil {
+			resolved.Attributes = make(map[string]string, len(raw.Attributes))
+			for k, v := range raw.Attributes {
+				resolved.Attributes[k] = v
+			}
+		}
+
+		// Validate
+		if resolved.Type == "" {
+			return ctx.error("type required")
+		}
+
+		r.templateMetrics[name] = resolved
+	}
+	return nil
+}
+
 // resolveMetrics resolves final metrics from raw config
 func (r *Resolver) resolveMetrics() ([]MetricConfig, error) {
 	var metrics []MetricConfig
@@ -51,153 +91,6 @@ func (r *Resolver) resolveMetric(raw *RawMetricConfig, ctx resolveContext) (Metr
 	}
 
 	return result, nil
-}
-
-// resolveValue resolves a value reference into fully populated ValueConfig.
-// Handles three cases: instance reference, template with overrides, inline definition.
-func (r *Resolver) resolveValue(raw *RawValueReference, ctx resolveContext) (ValueConfig, error) {
-	// Case 1: Instance reference - return stored config
-	if raw.Instance != "" {
-		instance, exists := r.instanceValues[raw.Instance]
-		if !exists {
-			return ValueConfig{}, ctx.error(fmt.Sprintf("value instance %q not found", raw.Instance))
-		}
-
-		// No overrides allowed for instances
-		if raw.Template != "" || raw.Source != nil ||
-			len(raw.Transforms) > 0 || raw.Reset.Type != "" {
-			return ValueConfig{}, ctx.error("cannot override instance value")
-		}
-
-		return instance, nil // Returns full config with references preserved
-	}
-
-	// Case 2: Template reference with optional overrides
-	if raw.Template != "" {
-		template, exists := r.templateValues[raw.Template]
-		if !exists {
-			return ValueConfig{}, ctx.error(fmt.Sprintf("value template %q not found", raw.Template))
-		}
-
-		// Start with template, apply overrides
-		result := template
-
-		if raw.Source != nil {
-			source, sourceRef, err := r.resolveSourceReference(raw.Source, ctx)
-			if err != nil {
-				return ValueConfig{}, err
-			}
-			result.Source = source
-			result.SourceRef = sourceRef // Preserve reference tracking
-		}
-
-		if len(raw.Transforms) > 0 {
-			result.Transforms = raw.Transforms
-		}
-
-		if raw.Reset.Type != "" {
-			result.Reset = raw.Reset
-		}
-
-		return result, nil
-	}
-
-	// Case 3: Inline definition - must have source
-	if raw.Source == nil {
-		return ValueConfig{}, ctx.error("value must reference instance, template, or provide inline source")
-	}
-
-	result := ValueConfig{}
-
-	source, sourceRef, err := r.resolveSourceReference(raw.Source, ctx)
-	if err != nil {
-		return ValueConfig{}, err
-	}
-	result.Source = source
-	result.SourceRef = sourceRef // Preserve reference tracking
-
-	result.Transforms = raw.Transforms
-	result.Reset = raw.Reset
-
-	return result, nil
-}
-
-// resolveSourceReference resolves a source reference
-func (r *Resolver) resolveSourceReference(raw *RawSourceReference, ctx resolveContext) (SourceConfig, *string, error) {
-	// Instance reference
-	if raw.Instance != "" {
-		instance, exists := r.instanceSources[raw.Instance]
-		if !exists {
-			return SourceConfig{}, nil, ctx.error(fmt.Sprintf("source instance %q not found", raw.Instance))
-		}
-		// No overrides allowed for instances
-		if raw.Template != "" || raw.Type != nil || raw.Clock != nil || raw.Min != nil || raw.Max != nil {
-			return SourceConfig{}, nil, ctx.error("cannot override instance source")
-		}
-		return instance, &raw.Instance, nil // Return instance ref
-	}
-
-	// Template reference (with optional overrides)
-	if raw.Template != "" {
-		template, exists := r.templateSources[raw.Template]
-		if !exists {
-			return SourceConfig{}, nil, ctx.error(fmt.Sprintf("source template %q not found", raw.Template))
-		}
-
-		// Apply overrides
-		result := template
-		if raw.Type != nil {
-			result.Type = *raw.Type
-		}
-		if raw.Clock != nil {
-			clock, clockRef, err := r.resolveClockReference(raw.Clock, ctx)
-			if err != nil {
-				return SourceConfig{}, nil, err
-			}
-			result.Clock = clock
-			result.ClockRef = clockRef
-		}
-		if raw.Min != nil {
-			result.Min = *raw.Min
-		}
-		if raw.Max != nil {
-			result.Max = *raw.Max
-		}
-		return result, nil, nil // No instance ref for templates
-	}
-
-	// Inline definition
-	if raw.Type != nil {
-		result := SourceConfig{}
-		result.Type = *raw.Type
-
-		// Resolve clock if present
-		if raw.Clock != nil {
-			clock, clockRef, err := r.resolveClockReference(raw.Clock, ctx)
-			if err != nil {
-				return SourceConfig{}, nil, err
-			}
-			result.Clock = clock
-			result.ClockRef = clockRef
-		}
-
-		// Copy optional fields
-		if raw.Min != nil {
-			result.Min = *raw.Min
-		}
-		if raw.Max != nil {
-			result.Max = *raw.Max
-		}
-
-		// Validate
-		if result.Type == "" {
-			return SourceConfig{}, nil, ctx.error("source type required")
-		}
-
-		return result, nil, nil
-	}
-
-	return SourceConfig{}, nil, ctx.error("source must reference instance, template, or provide inline definition")
 }
 
 // validateMetric validates a resolved metric config
