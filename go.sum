@@ -29,10 +29,6 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
-github.com/neox5/simv v0.2.0 h1:krSaFlOyMfJH2ULSvxvswY2QSaFUTgp+5tYEmlkoaUM=
-github.com/neox5/simv v0.2.0/go.mod h1:WJzmF98NQwN9z6+Xk2N63vM3bkPMEJJDOFgF5A3KSLI=
-github.com/neox5/simv v0.4.0 h1:l37YXH1QCuLrMltPRfP+DKVXcGqRlPr3BO7QBu+PxGE=
-github.com/neox5/simv v0.4.0/go.mod h1:WJzmF98NQwN9z6+Xk2N63vM3bkPMEJJDOFgF5A3KSLI=
 github.com/neox5/simv v0.5.0 h1:iQT06OipQkCI22snrlUp0HByXRu2elK+9P/1YvAcCjI=
 github.com/neox5/simv v0.5.0/go.mod h1:WJzmF98NQwN9z6+Xk2N63vM3bkPMEJJDOFgF5A3KSLI=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
