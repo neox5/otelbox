@@ -2,10 +2,13 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 )
 
 // resolveTemplateClocks resolves clock templates (no dependencies)
 func (r *Resolver) resolveTemplateClocks() error {
+	slog.Debug("resolved template clocks", "count", len(r.raw.Templates.Clocks))
+
 	for _, raw := range r.raw.Templates.Clocks {
 		name := raw.Name
 		if err := r.registerName(name, "template clock"); err != nil {
@@ -28,12 +31,19 @@ func (r *Resolver) resolveTemplateClocks() error {
 		}
 
 		r.templateClocks[name] = resolved
+
+		slog.Debug("template clock",
+			"name", name,
+			"type", resolved.Type,
+			"interval", resolved.Interval)
 	}
 	return nil
 }
 
 // resolveInstanceClocks resolves clock instances
 func (r *Resolver) resolveInstanceClocks() error {
+	slog.Debug("resolved instance clocks", "count", len(r.raw.Instances.Clocks))
+
 	for _, raw := range r.raw.Instances.Clocks {
 		name := raw.Name
 		if err := r.registerName(name, "instance clock"); err != nil {
@@ -56,6 +66,11 @@ func (r *Resolver) resolveInstanceClocks() error {
 		}
 
 		r.instanceClocks[name] = resolved
+
+		slog.Debug("instance clock",
+			"name", name,
+			"type", resolved.Type,
+			"interval", resolved.Interval)
 	}
 	return nil
 }

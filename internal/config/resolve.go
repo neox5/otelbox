@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
@@ -48,6 +49,14 @@ func Resolve(raw *RawConfig) (*Config, error) {
 			return nil, fmt.Errorf("failed to build iterator registry: %w", err)
 		}
 
+		slog.Debug("resolved iterators", "count", len(raw.Iterators))
+		for _, it := range registry.iterators {
+			slog.Debug("iterator",
+				"name", it.Name(),
+				"type", inferIteratorType(it),
+				"values", it.Len())
+		}
+
 		// Expand template clocks
 		raw.Templates.Clocks, err = expandClocks(raw.Templates.Clocks, registry)
 		if err != nil {
@@ -67,6 +76,7 @@ func Resolve(raw *RawConfig) (*Config, error) {
 	r := newResolver(raw)
 
 	// Phase 1: Resolve templates hierarchically
+	slog.Debug("--- Template Resolution ---")
 	if err := r.resolveTemplateClocks(); err != nil {
 		return nil, err
 	}
@@ -81,6 +91,7 @@ func Resolve(raw *RawConfig) (*Config, error) {
 	}
 
 	// Phase 2: Resolve instances hierarchically
+	slog.Debug("--- Instance Resolution ---")
 	if err := r.resolveInstanceClocks(); err != nil {
 		return nil, err
 	}
@@ -92,6 +103,7 @@ func Resolve(raw *RawConfig) (*Config, error) {
 	}
 
 	// Phase 3: Resolve metrics
+	slog.Debug("--- Metric Resolution ---")
 	resolvedMetrics, err := r.resolveMetrics()
 	if err != nil {
 		return nil, err
@@ -149,7 +161,7 @@ func (ctx resolveContext) push(component, name string) resolveContext {
 
 func (ctx resolveContext) error(msg string) error {
 	if len(ctx) == 0 {
-		return fmt.Errorf(msg)
+		return fmt.Errorf("%s", msg)
 	}
 
 	var b strings.Builder
@@ -159,5 +171,26 @@ func (ctx resolveContext) error(msg string) error {
 		b.WriteString("\n  in ")
 		b.WriteString(ctx[i])
 	}
-	return fmt.Errorf(b.String())
+	return fmt.Errorf("%s", b.String())
+}
+
+// inferIteratorType attempts to determine iterator type from its properties
+func inferIteratorType(it *Iterator) string {
+	// If we can generate sequential integers, it's likely a range
+	if it.Len() > 0 {
+		first := it.ValueAt(0)
+		if it.Len() > 1 {
+			second := it.ValueAt(1)
+			// Check if values look like sequential integers
+			var firstInt, secondInt int
+			if _, err := fmt.Sscanf(first, "%d", &firstInt); err == nil {
+				if _, err := fmt.Sscanf(second, "%d", &secondInt); err == nil {
+					if secondInt == firstInt+1 {
+						return "range"
+					}
+				}
+			}
+		}
+	}
+	return "list"
 }

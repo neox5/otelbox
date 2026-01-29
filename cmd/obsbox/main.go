@@ -27,6 +27,10 @@ func main() {
 				Value:   "config.yaml",
 				Usage:   "path to configuration file",
 			},
+			&cli.BoolFlag{
+				Name:  "debug",
+				Usage: "enable debug logging",
+			},
 		},
 		Action: serve,
 	}
@@ -39,20 +43,33 @@ func main() {
 
 func serve(ctx context.Context, cmd *cli.Command) error {
 	configPath := cmd.String("config")
+	debug := cmd.Bool("debug")
+
+	// Configure logging level
+	logLevel := slog.LevelInfo
+	if debug {
+		logLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: logLevel,
+	}))
+	slog.SetDefault(logger)
+
+	slog.Info("starting obsbox", "version", version.String(), "config", configPath)
 
 	// Load configuration
+	slog.Debug("--- Configuration Loading ---")
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	// Initialize application (handles seed initialization internally)
+	slog.Debug("--- Generator Creation ---")
 	application, err := app.New(cfg)
 	if err != nil {
 		return fmt.Errorf("initialization failed: %w", err)
 	}
-
-	slog.Info("starting obsbox", "version", version.String())
 
 	// Setup graceful shutdown
 	shutdownCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
@@ -63,28 +80,27 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 	defer application.Generator.Stop()
 
 	// Start exporters
+	slog.Debug("--- Exporter Initialization ---")
 	var wg sync.WaitGroup
 	errChan := make(chan error, 2)
 
 	if application.PrometheusExporter != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if err := application.PrometheusExporter.Start(shutdownCtx); err != nil {
 				errChan <- fmt.Errorf("prometheus exporter: %w", err)
 			}
-		}()
+		})
 	}
 
 	if application.OTELExporter != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if err := application.OTELExporter.Start(shutdownCtx); err != nil {
 				errChan <- fmt.Errorf("otel exporter: %w", err)
 			}
-		}()
+		})
 	}
+
+	slog.Debug("--- Application Running ---")
 
 	// Wait for shutdown or error
 	select {
@@ -94,6 +110,8 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 	case <-shutdownCtx.Done():
 		// Graceful shutdown
 	}
+
+	slog.Debug("--- Shutdown Initiated ---")
 
 	// Stop exporters
 	if application.PrometheusExporter != nil {

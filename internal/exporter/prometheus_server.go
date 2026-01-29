@@ -38,10 +38,21 @@ func createHTTPServer(
 		handler = baseHandler
 	}
 
+	// Wrap with debug logging
+	handler = loggingMiddleware(handler)
+
 	mux.Handle(path, handler)
 
 	return &http.Server{
 		Addr:    addr,
 		Handler: mux,
 	}
+}
+
+// loggingMiddleware logs scrape requests when debug logging is enabled
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		slog.Debug("prometheus scrape")
+		next.ServeHTTP(w, r)
+	})
 }

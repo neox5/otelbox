@@ -81,6 +81,8 @@ func registerOTELCallback(e *OTELExporter) error {
 	// Register callback with attributes
 	_, err := e.meter.RegisterCallback(
 		func(ctx context.Context, observer otelmetric.Observer) error {
+			slog.Debug("otel push", "metrics", len(e.instruments))
+
 			for _, inst := range e.instruments {
 				val := int64(inst.value.Value()) // Triggers reset_on_read if configured
 				if inst.counter != nil {

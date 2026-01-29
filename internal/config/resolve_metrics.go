@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
+	"maps"
 )
 
 // resolveTemplateMetrics resolves metric templates (may reference value templates)
@@ -30,9 +32,7 @@ func (r *Resolver) resolveTemplateMetrics() error {
 		// Copy attributes (can be nil)
 		if raw.Attributes != nil {
 			resolved.Attributes = make(map[string]string, len(raw.Attributes))
-			for k, v := range raw.Attributes {
-				resolved.Attributes[k] = v
-			}
+			maps.Copy(resolved.Attributes, raw.Attributes)
 		}
 
 		// Validate
@@ -48,6 +48,8 @@ func (r *Resolver) resolveTemplateMetrics() error {
 // resolveMetrics resolves final metrics from raw config
 func (r *Resolver) resolveMetrics() ([]MetricConfig, error) {
 	var metrics []MetricConfig
+
+	slog.Debug("resolved metrics", "count", len(r.raw.Metrics))
 
 	for _, raw := range r.raw.Metrics {
 		promName := raw.Name.GetPrometheusName()
@@ -83,9 +85,7 @@ func (r *Resolver) resolveMetric(raw *RawMetricConfig, ctx resolveContext) (Metr
 	// Apply attribute overrides (complete replacement if specified)
 	if raw.Attributes != nil {
 		result.Attributes = make(map[string]string, len(raw.Attributes))
-		for k, v := range raw.Attributes {
-			result.Attributes[k] = v
-		}
+		maps.Copy(result.Attributes, raw.Attributes)
 	}
 
 	// Validate final metric
@@ -184,8 +184,6 @@ func copyStringMap(src map[string]string) map[string]string {
 		return nil
 	}
 	dst := make(map[string]string, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
+	maps.Copy(dst, src)
 	return dst
 }

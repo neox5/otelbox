@@ -2,6 +2,8 @@ package generator
 
 import (
 	"fmt"
+	"log/slog"
+	"strings"
 
 	"github.com/neox5/obsbox/internal/config"
 	"github.com/neox5/obsbox/internal/simulation"
@@ -60,6 +62,12 @@ func New(metrics []config.MetricConfig) (*Generator, error) {
 
 		// Store for metric lookup (allows duplicates)
 		g.metricValues[i] = val
+
+		// Log metric creation
+		labels := formatLabels(metric.Attributes)
+		slog.Debug("created metric",
+			"type", metric.Type,
+			"name", fmt.Sprintf("%s%s", metric.PrometheusName, labels))
 	}
 
 	return g, nil
@@ -89,6 +97,12 @@ func (g *Generator) getOrCreateClock(sourceCfg config.SourceConfig) (clock.Clock
 		// Add to lifecycle management
 		g.clocks = append(g.clocks, clk)
 
+		// Log clock creation
+		slog.Debug("created clock",
+			"name", instanceName,
+			"type", sourceCfg.Clock.Type,
+			"interval", sourceCfg.Clock.Interval)
+
 		return clk, nil
 	}
 
@@ -100,6 +114,12 @@ func (g *Generator) getOrCreateClock(sourceCfg config.SourceConfig) (clock.Clock
 
 	// Add to lifecycle management
 	g.clocks = append(g.clocks, clk)
+
+	// Log clock creation
+	slog.Debug("created clock",
+		"name", "<inline>",
+		"type", sourceCfg.Clock.Type,
+		"interval", sourceCfg.Clock.Interval)
 
 	return clk, nil
 }
@@ -128,6 +148,18 @@ func (g *Generator) getOrCreateSource(valueCfg config.ValueConfig, clk clock.Clo
 		// Add to lifecycle management
 		g.sources = append(g.sources, src)
 
+		// Log source creation
+		clockName := "<inline>"
+		if valueCfg.Source.ClockRef != nil {
+			clockName = *valueCfg.Source.ClockRef
+		}
+		slog.Debug("created source",
+			"name", instanceName,
+			"type", valueCfg.Source.Type,
+			"clock", clockName,
+			"min", valueCfg.Source.Min,
+			"max", valueCfg.Source.Max)
+
 		return src, nil
 	}
 
@@ -139,6 +171,18 @@ func (g *Generator) getOrCreateSource(valueCfg config.ValueConfig, clk clock.Clo
 
 	// Add to lifecycle management
 	g.sources = append(g.sources, src)
+
+	// Log source creation
+	clockName := "<inline>"
+	if valueCfg.Source.ClockRef != nil {
+		clockName = *valueCfg.Source.ClockRef
+	}
+	slog.Debug("created source",
+		"name", "<inline>",
+		"type", valueCfg.Source.Type,
+		"clock", clockName,
+		"min", valueCfg.Source.Min,
+		"max", valueCfg.Source.Max)
 
 	return src, nil
 }
@@ -158,11 +202,39 @@ func (g *Generator) getOrCreateValue(valueCfg config.ValueConfig, src source.Pub
 	// Add to lifecycle management
 	g.values = append(g.values, val)
 
+	// Log value creation
+	sourceName := "<inline>"
+	if valueCfg.SourceRef != nil {
+		sourceName = *valueCfg.SourceRef
+	}
+
+	transformNames := make([]string, len(valueCfg.Transforms))
+	for i, t := range valueCfg.Transforms {
+		transformNames[i] = t.Type
+	}
+
+	attrs := []any{
+		"name", "<inline>",
+		"source", sourceName,
+		"transforms", fmt.Sprintf("[%s]", strings.Join(transformNames, ", ")),
+	}
+	if valueCfg.Reset.Type != "" {
+		attrs = append(attrs, "reset", valueCfg.Reset.Type)
+	}
+
+	slog.Debug("created value", attrs...)
+
 	return val, nil
 }
 
 // Start begins value generation by starting all unique clocks.
 func (g *Generator) Start() {
+	slog.Debug("starting generator",
+		"clocks", len(g.clocks),
+		"sources", len(g.sources),
+		"values", len(g.values),
+		"metrics", len(g.metricValues))
+
 	// Start each unique clock exactly once
 	for _, clk := range g.clocks {
 		clk.Start()
@@ -171,6 +243,8 @@ func (g *Generator) Start() {
 
 // Stop halts value generation and releases resources.
 func (g *Generator) Stop() {
+	slog.Debug("stopping generator")
+
 	// Stop unique clocks
 	for _, clk := range g.clocks {
 		clk.Stop()
@@ -188,4 +262,18 @@ func (g *Generator) GetValue(index int) *simulation.ValueWrapper {
 		return nil
 	}
 	return g.metricValues[index]
+}
+
+// formatLabels formats attributes as Prometheus-style labels
+func formatLabels(attrs map[string]string) string {
+	if len(attrs) == 0 {
+		return ""
+	}
+
+	var pairs []string
+	for k, v := range attrs {
+		pairs = append(pairs, fmt.Sprintf(`%s="%s"`, k, v))
+	}
+
+	return fmt.Sprintf("{%s}", strings.Join(pairs, ","))
 }

@@ -2,10 +2,14 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
+	"strings"
 )
 
 // resolveTemplateValues resolves value templates (may reference source templates)
 func (r *Resolver) resolveTemplateValues() error {
+	slog.Debug("resolved template values", "count", len(r.raw.Templates.Values))
+
 	for _, raw := range r.raw.Templates.Values {
 		name := raw.Name
 		if err := r.registerName(name, "template value"); err != nil {
@@ -36,12 +40,35 @@ func (r *Resolver) resolveTemplateValues() error {
 		}
 
 		r.templateValues[name] = resolved
+
+		sourceName := "<inline>"
+		if resolved.SourceRef != nil {
+			sourceName = *resolved.SourceRef
+		}
+
+		transformNames := make([]string, len(resolved.Transforms))
+		for i, t := range resolved.Transforms {
+			transformNames[i] = t.Type
+		}
+
+		attrs := []any{
+			"name", name,
+			"source", sourceName,
+			"transforms", fmt.Sprintf("[%s]", strings.Join(transformNames, ", ")),
+		}
+		if resolved.Reset.Type != "" {
+			attrs = append(attrs, "reset", resolved.Reset.Type)
+		}
+
+		slog.Debug("template value", attrs...)
 	}
 	return nil
 }
 
 // resolveInstanceValues resolves value instances (may reference template/instance sources)
 func (r *Resolver) resolveInstanceValues() error {
+	slog.Debug("resolved instance values", "count", len(r.raw.Instances.Values))
+
 	for _, raw := range r.raw.Instances.Values {
 		name := raw.Name
 		if err := r.registerName(name, "instance value"); err != nil {
@@ -72,6 +99,27 @@ func (r *Resolver) resolveInstanceValues() error {
 		}
 
 		r.instanceValues[name] = resolved
+
+		sourceName := "<inline>"
+		if resolved.SourceRef != nil {
+			sourceName = *resolved.SourceRef
+		}
+
+		transformNames := make([]string, len(resolved.Transforms))
+		for i, t := range resolved.Transforms {
+			transformNames[i] = t.Type
+		}
+
+		attrs := []any{
+			"name", name,
+			"source", sourceName,
+			"transforms", fmt.Sprintf("[%s]", strings.Join(transformNames, ", ")),
+		}
+		if resolved.Reset.Type != "" {
+			attrs = append(attrs, "reset", resolved.Reset.Type)
+		}
+
+		slog.Debug("instance value", attrs...)
 	}
 	return nil
 }
