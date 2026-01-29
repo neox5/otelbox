@@ -2,6 +2,7 @@ package config
 
 // RawConfig represents unparsed YAML structure
 type RawConfig struct {
+	Iterators []RawIterator     `yaml:"iterators,omitempty"`
 	Templates RawTemplates      `yaml:"templates"`
 	Instances RawInstances      `yaml:"instances"`
 	Metrics   []RawMetricConfig `yaml:"metrics"`

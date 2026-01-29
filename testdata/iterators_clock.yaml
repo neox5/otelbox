@@ -1,0 +1,40 @@
+# Test configuration for clock iterator expansion
+
+iterators:
+  - name: i
+    type: range
+    start: 0
+    end: 2
+
+  - name: region
+    type: list
+    values: [us, eu]
+
+instances:
+  clocks:
+    - name: tick_{i}_{region}
+      type: periodic
+      interval: 1s
+
+  sources:
+    - name: events_0_us
+      type: random_int
+      clock:
+        instance: tick_0_us
+      min: 0
+      max: 100
+
+metrics:
+  - name: test_events_total
+    type: counter
+    description: "Test metric using expanded clock"
+    value:
+      source:
+        instance: events_0_us
+      transforms: [accumulate]
+
+export:
+  prometheus:
+    enabled: true
+    port: 9090
+    path: /metrics

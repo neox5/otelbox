@@ -41,6 +41,29 @@ func newResolver(raw *RawConfig) *Resolver {
 
 // Resolve performs hierarchical template and instance resolution and builds final config
 func Resolve(raw *RawConfig) (*Config, error) {
+	// Phase 0: Expand iterators (if present)
+	if len(raw.Iterators) > 0 {
+		registry, err := buildIteratorRegistry(raw.Iterators)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build iterator registry: %w", err)
+		}
+
+		// Expand template clocks
+		raw.Templates.Clocks, err = expandClocks(raw.Templates.Clocks, registry)
+		if err != nil {
+			return nil, fmt.Errorf("failed to expand template clocks: %w", err)
+		}
+
+		// Expand instance clocks
+		raw.Instances.Clocks, err = expandClocks(raw.Instances.Clocks, registry)
+		if err != nil {
+			return nil, fmt.Errorf("failed to expand instance clocks: %w", err)
+		}
+
+		// Clear iterators - they've been consumed
+		raw.Iterators = nil
+	}
+
 	r := newResolver(raw)
 
 	// Phase 1: Resolve templates hierarchically
