@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,37 +12,50 @@ import (
 	"github.com/neox5/obsbox/internal/app"
 	"github.com/neox5/obsbox/internal/config"
 	"github.com/neox5/obsbox/internal/version"
+	"github.com/urfave/cli/v3"
 )
 
 func main() {
-	// Handle --version flag
-	if len(os.Args) > 1 && os.Args[1] == "--version" {
-		fmt.Println("obsbox", version.String())
-		os.Exit(0)
+	cmd := &cli.Command{
+		Name:    "obsbox",
+		Usage:   "Telemetry signal generator for testing observability components",
+		Version: version.String(),
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "config",
+				Aliases: []string{"c"},
+				Value:   "config.yaml",
+				Usage:   "path to configuration file",
+			},
+		},
+		Action: serve,
 	}
 
-	// Parse command line flags
-	configPath := flag.String("config", "config.yaml", "path to configuration file")
-	flag.Parse()
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func serve(ctx context.Context, cmd *cli.Command) error {
+	configPath := cmd.String("config")
 
 	// Load configuration
-	cfg, err := config.Load(*configPath)
+	cfg, err := config.Load(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	// Initialize application (handles seed initialization internally)
 	application, err := app.New(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "initialization failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("initialization failed: %w", err)
 	}
 
 	slog.Info("starting obsbox", "version", version.String())
 
 	// Setup graceful shutdown
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	shutdownCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	// Start generator
@@ -58,7 +70,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := application.PrometheusExporter.Start(ctx); err != nil {
+			if err := application.PrometheusExporter.Start(shutdownCtx); err != nil {
 				errChan <- fmt.Errorf("prometheus exporter: %w", err)
 			}
 		}()
@@ -68,7 +80,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := application.OTELExporter.Start(ctx); err != nil {
+			if err := application.OTELExporter.Start(shutdownCtx); err != nil {
 				errChan <- fmt.Errorf("otel exporter: %w", err)
 			}
 		}()
@@ -78,8 +90,8 @@ func main() {
 	select {
 	case err := <-errChan:
 		slog.Error("exporter error", "error", err)
-		os.Exit(1)
-	case <-ctx.Done():
+		return err
+	case <-shutdownCtx.Done():
 		// Graceful shutdown
 	}
 
@@ -93,4 +105,5 @@ func main() {
 
 	wg.Wait()
 	slog.Info("shutdown complete")
+	return nil
 }
