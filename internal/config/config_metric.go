@@ -3,9 +3,6 @@ package config
 import (
 	"regexp"
 	"strings"
-	"time"
-
-	"go.yaml.in/yaml/v4"
 )
 
 var attributeNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
@@ -16,7 +13,7 @@ type MetricConfig struct {
 	OTELName       string
 	Type           MetricType
 	Description    string
-	Value          ValueConfig // Changed from: ValueRef ValueReference
+	Value          ValueConfig
 	Attributes     map[string]string
 }
 
@@ -28,54 +25,8 @@ const (
 	MetricTypeGauge   MetricType = "gauge"
 )
 
-// MetricNameConfig supports both short and full forms for metric names
-type MetricNameConfig struct {
-	Simple     string
-	Prometheus string
-	OTEL       string
-}
-
-// UnmarshalYAML handles both string and object forms for metric names
-func (m *MetricNameConfig) UnmarshalYAML(value *yaml.Node) error {
-	// Try string form first (short form)
-	var simple string
-	if err := value.Decode(&simple); err == nil {
-		m.Simple = simple
-		return nil
-	}
-
-	// Try full form (object)
-	type nameConfig struct {
-		Prometheus string `yaml:"prometheus"`
-		OTEL       string `yaml:"otel"`
-	}
-	var full nameConfig
-	if err := value.Decode(&full); err != nil {
-		return err
-	}
-	m.Prometheus = full.Prometheus
-	m.OTEL = full.OTEL
-	return nil
-}
-
-// GetPrometheusName returns the Prometheus metric name
-func (m *MetricNameConfig) GetPrometheusName() string {
-	if m.Simple != "" {
-		return m.Simple
-	}
-	return m.Prometheus
-}
-
-// GetOTELName returns the OTEL metric name
-func (m *MetricNameConfig) GetOTELName() string {
-	if m.Simple != "" {
-		return m.Simple
-	}
-	return m.OTEL
-}
-
-// isValidAttributeName checks if an attribute name follows conventions
-func isValidAttributeName(name string) bool {
+// IsValidAttributeName checks if an attribute name follows conventions
+func IsValidAttributeName(name string) bool {
 	if len(name) == 0 {
 		return false
 	}
@@ -83,27 +34,4 @@ func isValidAttributeName(name string) bool {
 		return false
 	}
 	return attributeNameRegex.MatchString(name)
-}
-
-// ValueConfig defines a fully resolved value with embedded components.
-type ValueConfig struct {
-	Source     SourceConfig
-	SourceRef  *string // Instance name if source is shared
-	Transforms []TransformConfig
-	Reset      ResetConfig
-}
-
-// SourceConfig defines a fully resolved source with embedded clock
-type SourceConfig struct {
-	Type     string
-	Clock    ClockConfig
-	ClockRef *string // Instance name if clock is shared
-	Min      int
-	Max      int
-}
-
-// ClockConfig defines a fully resolved clock
-type ClockConfig struct {
-	Type     string
-	Interval time.Duration
 }

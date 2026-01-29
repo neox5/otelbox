@@ -1,6 +1,8 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // resolveTemplateValues resolves value templates (may reference source templates)
 func (r *Resolver) resolveTemplateValues() error {
@@ -15,7 +17,7 @@ func (r *Resolver) resolveTemplateValues() error {
 
 		// Resolve source (inline only for templates)
 		if raw.Source != nil {
-			source, sourceRef, err := r.resolveSourceFromReference(raw.Source, ctx)
+			source, sourceRef, err := r.resolveSourceReference(raw.Source, ctx)
 			if err != nil {
 				return err
 			}
@@ -50,7 +52,7 @@ func (r *Resolver) resolveInstanceValues() error {
 
 		// Resolve source reference if present
 		if raw.Source != nil {
-			source, sourceRef, err := r.resolveSourceFromReference(raw.Source, ctx)
+			source, sourceRef, err := r.resolveSourceReference(raw.Source, ctx)
 			if err != nil {
 				return err
 			}
@@ -139,11 +141,6 @@ func (r *Resolver) resolveValue(raw *RawValueReference, ctx resolveContext) (Val
 	result.Reset = raw.Reset
 
 	return result, nil
-}
-
-// resolveValueFromReference is an alias for resolveValue for backward compatibility
-func (r *Resolver) resolveValueFromReference(raw *RawValueReference, ctx resolveContext) (ValueConfig, error) {
-	return r.resolveValue(raw, ctx)
 }
 
 // validateValue validates a resolved value config

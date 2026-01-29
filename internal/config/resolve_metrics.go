@@ -1,6 +1,8 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // resolveTemplateMetrics resolves metric templates (may reference value templates)
 func (r *Resolver) resolveTemplateMetrics() error {
@@ -17,7 +19,7 @@ func (r *Resolver) resolveTemplateMetrics() error {
 
 		// Resolve value reference if present
 		if raw.Value != nil {
-			value, err := r.resolveValueFromReference(raw.Value, ctx)
+			value, err := r.resolveValue(raw.Value, ctx)
 			if err != nil {
 				return err
 			}
@@ -118,4 +120,71 @@ func (r *Resolver) validateMetric(metric MetricConfig, ctx resolveContext) error
 	}
 
 	return nil
+}
+
+// resolveExport converts raw export config to resolved export config
+func resolveExport(raw *RawExportConfig) (ExportConfig, error) {
+	result := ExportConfig{}
+
+	// Convert Prometheus config if present
+	if raw.Prometheus != nil {
+		result.Prometheus = &PrometheusExportConfig{
+			Enabled: raw.Prometheus.Enabled,
+			Port:    raw.Prometheus.Port,
+			Path:    raw.Prometheus.Path,
+		}
+	}
+
+	// Convert OTEL config if present
+	if raw.OTEL != nil {
+		result.OTEL = &OTELExportConfig{
+			Enabled:   raw.OTEL.Enabled,
+			Transport: raw.OTEL.Transport,
+			Host:      raw.OTEL.Host,
+			Port:      raw.OTEL.Port,
+			Interval: IntervalConfig{
+				Read: raw.OTEL.Interval.Read,
+				Push: raw.OTEL.Interval.Push,
+			},
+			Resource: copyStringMap(raw.OTEL.Resource),
+			Headers:  copyStringMap(raw.OTEL.Headers),
+		}
+	}
+
+	// Validate converted config
+	if err := result.Validate(); err != nil {
+		return ExportConfig{}, err
+	}
+
+	return result, nil
+}
+
+// resolveSettings converts raw settings config to resolved settings config
+func resolveSettings(raw *RawSettingsConfig) (SettingsConfig, error) {
+	result := SettingsConfig{
+		Seed: raw.Seed,
+		InternalMetrics: InternalMetricsConfig{
+			Enabled: raw.InternalMetrics.Enabled,
+			Format:  NamingFormat(raw.InternalMetrics.Format),
+		},
+	}
+
+	// Validate converted config
+	if err := result.Validate(); err != nil {
+		return SettingsConfig{}, err
+	}
+
+	return result, nil
+}
+
+// copyStringMap creates a copy of a string map (handles nil)
+func copyStringMap(src map[string]string) map[string]string {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]string, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }

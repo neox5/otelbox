@@ -4,14 +4,14 @@ import "fmt"
 
 // SettingsConfig holds general application settings.
 type SettingsConfig struct {
-	Seed            *uint64               `yaml:"seed,omitempty"`
-	InternalMetrics InternalMetricsConfig `yaml:"internal_metrics"`
+	Seed            *uint64
+	InternalMetrics InternalMetricsConfig
 }
 
 // InternalMetricsConfig controls obsbox's self-monitoring metrics.
 type InternalMetricsConfig struct {
-	Enabled bool         `yaml:"enabled"`
-	Format  NamingFormat `yaml:"format"`
+	Enabled bool
+	Format  NamingFormat
 }
 
 // NamingFormat defines the naming convention for internal metrics.

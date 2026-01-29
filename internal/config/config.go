@@ -14,9 +14,3 @@ type InstanceRegistry struct {
 	Sources map[string]SourceConfig
 	Values  map[string]ValueConfig
 }
-
-// ValueReference represents either an instance reference or inline config
-type ValueReference struct {
-	InstanceName *string      // Reference to instance in registry
-	Config       *ValueConfig // Inline config for new objects
-}

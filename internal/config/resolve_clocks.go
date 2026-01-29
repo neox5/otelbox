@@ -1,6 +1,8 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // resolveTemplateClocks resolves clock templates (no dependencies)
 func (r *Resolver) resolveTemplateClocks() error {

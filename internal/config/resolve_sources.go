@@ -1,6 +1,8 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // resolveTemplateSources resolves source templates (may reference clock templates)
 func (r *Resolver) resolveTemplateSources() error {
@@ -160,9 +162,4 @@ func (r *Resolver) resolveSourceReference(raw *RawSourceReference, ctx resolveCo
 	}
 
 	return SourceConfig{}, nil, ctx.error("source must reference instance, template, or provide inline definition")
-}
-
-// resolveSourceFromReference is an alias for resolveSourceReference for backward compatibility
-func (r *Resolver) resolveSourceFromReference(raw *RawSourceReference, ctx resolveContext) (SourceConfig, *string, error) {
-	return r.resolveSourceReference(raw, ctx)
 }
