@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 
 	"github.com/neox5/obsbox/internal/metric"
 	"go.opentelemetry.io/otel/attribute"
@@ -49,10 +50,18 @@ func registerOTELInstruments(e *OTELExporter, metrics *metric.Registry) error {
 		}
 
 		instruments = append(instruments, inst)
+
+		// Extract and sort attribute key=value pairs for logging
+		attrPairs := make([]string, len(attrs))
+		for i, attr := range attrs {
+			attrPairs[i] = fmt.Sprintf("%s=%s", attr.Key, attr.Value.AsString())
+		}
+		sort.Strings(attrPairs)
+
 		slog.Info("registered otel metric",
 			"name", m.OTELName,
 			"type", m.Type,
-			"attributes", len(attrs))
+			"attributes", fmt.Sprintf("[%s]", attrPairs))
 	}
 
 	e.instruments = instruments

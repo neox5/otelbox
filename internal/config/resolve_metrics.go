@@ -16,7 +16,7 @@ func (r *Resolver) resolveTemplateMetrics() error {
 func (r *Resolver) resolveMetrics() ([]MetricConfig, error) {
 	var metrics []MetricConfig
 
-	slog.Debug("resolved metrics", "count", len(r.raw.Metrics))
+	slog.Debug("resolving metrics", "count", len(r.raw.Metrics))
 
 	for _, raw := range r.raw.Metrics {
 		promName := raw.Name.GetPrometheusName()
@@ -28,6 +28,7 @@ func (r *Resolver) resolveMetrics() ([]MetricConfig, error) {
 		}
 
 		metrics = append(metrics, metric)
+		slog.Debug("resolved metric", "metric", metric)
 	}
 
 	return metrics, nil

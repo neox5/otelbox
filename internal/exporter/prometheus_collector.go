@@ -1,6 +1,7 @@
 package exporter
 
 import (
+	"fmt"
 	"log/slog"
 	"sort"
 
@@ -60,10 +61,16 @@ func newCollector(metrics *metric.Registry) *collector {
 			labelValues: labelValues,
 		})
 
+		// Build label key=value pairs for logging
+		labelPairs := make([]string, len(labelNames))
+		for i := range labelNames {
+			labelPairs[i] = fmt.Sprintf("%s=%s", labelNames[i], labelValues[i])
+		}
+
 		slog.Info("registered prometheus metric",
 			"name", m.PrometheusName,
 			"type", m.Type,
-			"labels", labelNames)
+			"labels", fmt.Sprintf("%s", labelPairs))
 	}
 
 	return &collector{descriptors: descriptors}

@@ -3,6 +3,7 @@ package generator
 import (
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/neox5/obsbox/internal/config"
@@ -63,11 +64,25 @@ func New(metrics []config.MetricConfig) (*Generator, error) {
 		// Store for metric lookup (allows duplicates)
 		g.metricValues[i] = val
 
-		// Log metric creation
-		labels := formatLabels(metric.Attributes)
-		slog.Debug("created metric",
+		// Log metric creation with structured attributes
+		logAttrs := []any{
 			"type", metric.Type,
-			"name", fmt.Sprintf("%s%s", metric.PrometheusName, labels))
+			"name", metric.PrometheusName,
+		}
+		if len(metric.Attributes) > 0 {
+			attrKeys := make([]string, 0, len(metric.Attributes))
+			for k := range metric.Attributes {
+				attrKeys = append(attrKeys, k)
+			}
+			sort.Strings(attrKeys)
+
+			attrPairs := make([]string, len(attrKeys))
+			for i, k := range attrKeys {
+				attrPairs[i] = fmt.Sprintf("%s=%s", k, metric.Attributes[k])
+			}
+			logAttrs = append(logAttrs, "attributes", fmt.Sprintf("[%s]", strings.Join(attrPairs, " ")))
+		}
+		slog.Debug("created metric", logAttrs...)
 	}
 
 	return g, nil
@@ -100,8 +115,9 @@ func (g *Generator) getOrCreateClock(sourceCfg config.SourceConfig) (clock.Clock
 		// Log clock creation
 		slog.Debug("created clock",
 			"name", instanceName,
-			"type", sourceCfg.Clock.Type,
-			"interval", sourceCfg.Clock.Interval)
+			slog.Group("clock",
+				"type", sourceCfg.Clock.Type,
+				"interval", sourceCfg.Clock.Interval))
 
 		return clk, nil
 	}
@@ -118,8 +134,9 @@ func (g *Generator) getOrCreateClock(sourceCfg config.SourceConfig) (clock.Clock
 	// Log clock creation
 	slog.Debug("created clock",
 		"name", "<inline>",
-		"type", sourceCfg.Clock.Type,
-		"interval", sourceCfg.Clock.Interval)
+		slog.Group("clock",
+			"type", sourceCfg.Clock.Type,
+			"interval", sourceCfg.Clock.Interval))
 
 	return clk, nil
 }
@@ -151,14 +168,15 @@ func (g *Generator) getOrCreateSource(valueCfg config.ValueConfig, clk clock.Clo
 		// Log source creation
 		clockName := "<inline>"
 		if valueCfg.Source.ClockRef != nil {
-			clockName = *valueCfg.Source.ClockRef
+			clockName = "instance:" + *valueCfg.Source.ClockRef
 		}
 		slog.Debug("created source",
 			"name", instanceName,
-			"type", valueCfg.Source.Type,
-			"clock", clockName,
-			"min", valueCfg.Source.Min,
-			"max", valueCfg.Source.Max)
+			slog.Group("source",
+				"type", valueCfg.Source.Type,
+				"clock", clockName,
+				"min", valueCfg.Source.Min,
+				"max", valueCfg.Source.Max))
 
 		return src, nil
 	}
@@ -175,14 +193,15 @@ func (g *Generator) getOrCreateSource(valueCfg config.ValueConfig, clk clock.Clo
 	// Log source creation
 	clockName := "<inline>"
 	if valueCfg.Source.ClockRef != nil {
-		clockName = *valueCfg.Source.ClockRef
+		clockName = "instance:" + *valueCfg.Source.ClockRef
 	}
 	slog.Debug("created source",
 		"name", "<inline>",
-		"type", valueCfg.Source.Type,
-		"clock", clockName,
-		"min", valueCfg.Source.Min,
-		"max", valueCfg.Source.Max)
+		slog.Group("source",
+			"type", valueCfg.Source.Type,
+			"clock", clockName,
+			"min", valueCfg.Source.Min,
+			"max", valueCfg.Source.Max))
 
 	return src, nil
 }
@@ -205,7 +224,7 @@ func (g *Generator) getOrCreateValue(valueCfg config.ValueConfig, src source.Pub
 	// Log value creation
 	sourceName := "<inline>"
 	if valueCfg.SourceRef != nil {
-		sourceName = *valueCfg.SourceRef
+		sourceName = "instance:" + *valueCfg.SourceRef
 	}
 
 	transformNames := make([]string, len(valueCfg.Transforms))
@@ -215,11 +234,23 @@ func (g *Generator) getOrCreateValue(valueCfg config.ValueConfig, src source.Pub
 
 	attrs := []any{
 		"name", "<inline>",
-		"source", sourceName,
-		"transforms", fmt.Sprintf("[%s]", strings.Join(transformNames, ", ")),
+		slog.Group("value",
+			"source", sourceName,
+			"transforms", fmt.Sprintf("[%s]", strings.Join(transformNames, " "))),
 	}
 	if valueCfg.Reset.Type != "" {
-		attrs = append(attrs, "reset", valueCfg.Reset.Type)
+		resetDesc := valueCfg.Reset.Type
+		if valueCfg.Reset.Value != 0 {
+			resetDesc = fmt.Sprintf("%s:%d", valueCfg.Reset.Type, valueCfg.Reset.Value)
+		}
+		// Add reset to the value group
+		attrs = []any{
+			"name", "<inline>",
+			slog.Group("value",
+				"source", sourceName,
+				"transforms", fmt.Sprintf("[%s]", strings.Join(transformNames, " ")),
+				"reset", resetDesc),
+		}
 	}
 
 	slog.Debug("created value", attrs...)
@@ -262,18 +293,4 @@ func (g *Generator) GetValue(index int) *simulation.ValueWrapper {
 		return nil
 	}
 	return g.metricValues[index]
-}
-
-// formatLabels formats attributes as Prometheus-style labels
-func formatLabels(attrs map[string]string) string {
-	if len(attrs) == 0 {
-		return ""
-	}
-
-	var pairs []string
-	for k, v := range attrs {
-		pairs = append(pairs, fmt.Sprintf(`%s="%s"`, k, v))
-	}
-
-	return fmt.Sprintf("{%s}", strings.Join(pairs, ","))
 }

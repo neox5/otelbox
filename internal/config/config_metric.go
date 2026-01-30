@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -52,13 +54,19 @@ func (m MetricConfig) LogValue() slog.Value {
 		slog.String("value", valueName),
 	}
 
-	// Add attributes as nested group
+	// Add attributes as sorted key=value pairs if present
 	if len(m.Attributes) > 0 {
-		attrPairs := make([]any, 0, len(m.Attributes)*2)
-		for k, v := range m.Attributes {
-			attrPairs = append(attrPairs, k, v)
+		attrKeys := make([]string, 0, len(m.Attributes))
+		for k := range m.Attributes {
+			attrKeys = append(attrKeys, k)
 		}
-		attrs = append(attrs, slog.Group("attributes", attrPairs...))
+		sort.Strings(attrKeys)
+
+		attrPairs := make([]string, len(attrKeys))
+		for i, k := range attrKeys {
+			attrPairs[i] = fmt.Sprintf("%s=%s", k, m.Attributes[k])
+		}
+		attrs = append(attrs, slog.String("attributes", fmt.Sprintf("[%s]", strings.Join(attrPairs, " "))))
 	}
 
 	return slog.GroupValue(attrs...)
