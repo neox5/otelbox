@@ -32,10 +32,7 @@ func (r *Resolver) resolveTemplateClocks() error {
 
 		r.templateClocks[name] = resolved
 
-		slog.Debug("template clock",
-			"name", name,
-			"type", resolved.Type,
-			"interval", resolved.Interval)
+		slog.Debug("template clock", "name", name, "clock", resolved)
 	}
 	return nil
 }
@@ -67,10 +64,7 @@ func (r *Resolver) resolveInstanceClocks() error {
 
 		r.instanceClocks[name] = resolved
 
-		slog.Debug("instance clock",
-			"name", name,
-			"type", resolved.Type,
-			"interval", resolved.Interval)
+		slog.Debug("instance clock", "name", name, "clock", resolved)
 	}
 	return nil
 }

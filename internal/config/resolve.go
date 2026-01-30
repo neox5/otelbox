@@ -42,96 +42,134 @@ func newResolver(raw *RawConfig) *Resolver {
 
 // Resolve performs hierarchical template and instance resolution and builds final config
 func Resolve(raw *RawConfig) (*Config, error) {
-	// Phase 0: Expand iterators (if present)
-	if len(raw.Iterators) > 0 {
-		registry, err := buildIteratorRegistry(raw.Iterators)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build iterator registry: %w", err)
-		}
-
-		slog.Debug("resolved iterators", "count", len(raw.Iterators))
-		for _, it := range registry.iterators {
-			slog.Debug("iterator",
-				"name", it.Name(),
-				"type", inferIteratorType(it),
-				"values", it.Len())
-		}
-
-		// Expand template clocks
-		raw.Templates.Clocks, err = expandClocks(raw.Templates.Clocks, registry)
-		if err != nil {
-			return nil, fmt.Errorf("failed to expand template clocks: %w", err)
-		}
-
-		// Expand instance clocks
-		raw.Instances.Clocks, err = expandClocks(raw.Instances.Clocks, registry)
-		if err != nil {
-			return nil, fmt.Errorf("failed to expand instance clocks: %w", err)
-		}
-
-		// Clear iterators - they've been consumed
-		raw.Iterators = nil
-	}
-
-	r := newResolver(raw)
-
-	// Phase 1: Resolve templates hierarchically
-	slog.Debug("--- Template Resolution ---")
-	if err := r.resolveTemplateClocks(); err != nil {
-		return nil, err
-	}
-	if err := r.resolveTemplateSources(); err != nil {
-		return nil, err
-	}
-	if err := r.resolveTemplateValues(); err != nil {
-		return nil, err
-	}
-	if err := r.resolveTemplateMetrics(); err != nil {
+	// Phase 0: Iterator expansion
+	if err := expandIterators(raw); err != nil {
 		return nil, err
 	}
 
-	// Phase 2: Resolve instances hierarchically
-	slog.Debug("--- Instance Resolution ---")
-	if err := r.resolveInstanceClocks(); err != nil {
+	// Phase 1-2: Resolve by dependency order
+	slog.Debug("--- Template and Instance Resolution ---")
+	resolver := newResolver(raw)
+
+	// Clocks (no dependencies)
+	slog.Debug("resolving clocks")
+	if err := resolver.resolveTemplateClocks(); err != nil {
 		return nil, err
 	}
-	if err := r.resolveInstanceSources(); err != nil {
-		return nil, err
-	}
-	if err := r.resolveInstanceValues(); err != nil {
+	if err := resolver.resolveInstanceClocks(); err != nil {
 		return nil, err
 	}
 
-	// Phase 3: Resolve metrics
+	// Sources (depend on clocks)
+	slog.Debug("resolving sources")
+	if err := resolver.resolveTemplateSources(); err != nil {
+		return nil, err
+	}
+	if err := resolver.resolveInstanceSources(); err != nil {
+		return nil, err
+	}
+
+	// Values (depend on sources)
+	slog.Debug("resolving values")
+	if err := resolver.resolveTemplateValues(); err != nil {
+		return nil, err
+	}
+	if err := resolver.resolveInstanceValues(); err != nil {
+		return nil, err
+	}
+
+	// Metrics (depend on values)
+	slog.Debug("resolving metrics")
+	if err := resolver.resolveTemplateMetrics(); err != nil {
+		return nil, err
+	}
+
+	// Phase 3: Metric resolution
 	slog.Debug("--- Metric Resolution ---")
-	resolvedMetrics, err := r.resolveMetrics()
+	metrics, err := resolver.resolveMetrics()
 	if err != nil {
 		return nil, err
 	}
 
-	// Phase 4: Resolve export config
-	resolvedExport, err := resolveExport(&r.raw.Export)
+	// Phase 4: Export resolution
+	export, err := resolveExport(&raw.Export)
 	if err != nil {
 		return nil, err
 	}
 
-	// Phase 5: Resolve settings config
-	resolvedSettings, err := resolveSettings(&r.raw.Settings)
+	// Phase 5: Settings resolution
+	settings, err := resolveSettings(&raw.Settings)
 	if err != nil {
 		return nil, err
 	}
 
-	// Phase 6: Build final config (templates discarded, instances kept)
+	// Phase 6: Assemble final config
+	return buildConfig(resolver, metrics, export, settings), nil
+}
+
+// expandIterators expands all iterator placeholders in raw config
+func expandIterators(raw *RawConfig) error {
+	if len(raw.Iterators) == 0 {
+		return nil
+	}
+
+	registry, err := buildIteratorRegistry(raw.Iterators)
+	if err != nil {
+		return fmt.Errorf("failed to build iterator registry: %w", err)
+	}
+
+	slog.Debug("resolved iterators", "count", len(raw.Iterators))
+	for _, it := range registry.iterators {
+		slog.Debug("iterator", "iterator", it)
+	}
+
+	// Expand template clocks
+	raw.Templates.Clocks, err = expandClocks(raw.Templates.Clocks, registry)
+	if err != nil {
+		return fmt.Errorf("failed to expand template clocks: %w", err)
+	}
+
+	// Expand instance clocks
+	raw.Instances.Clocks, err = expandClocks(raw.Instances.Clocks, registry)
+	if err != nil {
+		return fmt.Errorf("failed to expand instance clocks: %w", err)
+	}
+
+	// Expand template sources
+	raw.Templates.Sources, err = expandSources(raw.Templates.Sources, registry)
+	if err != nil {
+		return fmt.Errorf("failed to expand template sources: %w", err)
+	}
+
+	// Expand instance sources
+	raw.Instances.Sources, err = expandSources(raw.Instances.Sources, registry)
+	if err != nil {
+		return fmt.Errorf("failed to expand instance sources: %w", err)
+	}
+
+	// Clear iterators - they've been consumed
+	raw.Iterators = nil
+
+	return nil
+}
+
+// buildConfig assembles the final configuration
+func buildConfig(
+	resolver *Resolver,
+	metrics []MetricConfig,
+	export ExportConfig,
+	settings SettingsConfig,
+) *Config {
 	return &Config{
 		Instances: InstanceRegistry{
-			Clocks:  r.instanceClocks,
-			Sources: r.instanceSources,
-			Values:  r.instanceValues,
+			Clocks:  resolver.instanceClocks,
+			Sources: resolver.instanceSources,
+			Values:  resolver.instanceValues,
 		},
-		Metrics:  resolvedMetrics,
-		Export:   resolvedExport,
-		Settings: resolvedSettings,
-	}, nil
+		Metrics:  metrics,
+		Export:   export,
+		Settings: settings,
+	}
 }
 
 // registerName validates namespace uniqueness and registers the name
@@ -172,25 +210,4 @@ func (ctx resolveContext) error(msg string) error {
 		b.WriteString(ctx[i])
 	}
 	return fmt.Errorf("%s", b.String())
-}
-
-// inferIteratorType attempts to determine iterator type from its properties
-func inferIteratorType(it *Iterator) string {
-	// If we can generate sequential integers, it's likely a range
-	if it.Len() > 0 {
-		first := it.ValueAt(0)
-		if it.Len() > 1 {
-			second := it.ValueAt(1)
-			// Check if values look like sequential integers
-			var firstInt, secondInt int
-			if _, err := fmt.Sscanf(first, "%d", &firstInt); err == nil {
-				if _, err := fmt.Sscanf(second, "%d", &secondInt); err == nil {
-					if secondInt == firstInt+1 {
-						return "range"
-					}
-				}
-			}
-		}
-	}
-	return "list"
 }

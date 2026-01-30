@@ -46,17 +46,7 @@ func (r *Resolver) resolveTemplateSources() error {
 
 		r.templateSources[name] = resolved
 
-		clockName := "<inline>"
-		if resolved.ClockRef != nil {
-			clockName = *resolved.ClockRef
-		}
-
-		slog.Debug("template source",
-			"name", name,
-			"type", resolved.Type,
-			"clock", clockName,
-			"min", resolved.Min,
-			"max", resolved.Max)
+		slog.Debug("template source", "name", name, "source", resolved)
 	}
 	return nil
 }
@@ -102,17 +92,7 @@ func (r *Resolver) resolveInstanceSources() error {
 
 		r.instanceSources[name] = resolved
 
-		clockName := "<inline>"
-		if resolved.ClockRef != nil {
-			clockName = *resolved.ClockRef
-		}
-
-		slog.Debug("instance source",
-			"name", name,
-			"type", resolved.Type,
-			"clock", clockName,
-			"min", resolved.Min,
-			"max", resolved.Max)
+		slog.Debug("instance source", "name", name, "source", resolved)
 	}
 	return nil
 }

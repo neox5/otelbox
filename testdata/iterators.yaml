@@ -1,0 +1,55 @@
+# Test configuration for iterator expansion (clocks and sources)
+
+iterators:
+  - name: i
+    type: range
+    start: 0
+    end: 2
+
+  - name: region
+    type: list
+    values: [us, eu]
+
+instances:
+  clocks:
+    # Clock instances with iterator expansion
+    # Expands to: tick_0_us, tick_0_eu, tick_1_us, tick_1_eu, tick_2_us, tick_2_eu
+    - name: tick_{i}_{region}
+      type: periodic
+      interval: 1s
+
+  sources:
+    # Source instances with iterator expansion
+    # Expands to: events_0_us, events_0_eu, events_1_us, events_1_eu, events_2_us, events_2_eu
+    - name: events_{i}_{region}
+      type: random_int
+      clock:
+        instance: tick_{i}_{region}
+      min: 0
+      max: 100
+
+  values:
+    # Value instances referencing expanded sources
+    - name: total_events_0_us
+      source:
+        instance: events_0_us
+      transforms: [accumulate]
+
+metrics:
+  - name: test_events_total
+    type: counter
+    description: "Test metric using expanded clock and source"
+    value:
+      instance: total_events_0_us
+    attributes:
+      region: us
+      index: "0"
+
+export:
+  prometheus:
+    enabled: true
+    port: 9090
+    path: /metrics
+
+settings:
+  seed: 12345

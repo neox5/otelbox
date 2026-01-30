@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"log/slog"
-	"strings"
 )
 
 // resolveTemplateValues resolves value templates (may reference source templates)
@@ -41,26 +40,7 @@ func (r *Resolver) resolveTemplateValues() error {
 
 		r.templateValues[name] = resolved
 
-		sourceName := "<inline>"
-		if resolved.SourceRef != nil {
-			sourceName = *resolved.SourceRef
-		}
-
-		transformNames := make([]string, len(resolved.Transforms))
-		for i, t := range resolved.Transforms {
-			transformNames[i] = t.Type
-		}
-
-		attrs := []any{
-			"name", name,
-			"source", sourceName,
-			"transforms", fmt.Sprintf("[%s]", strings.Join(transformNames, ", ")),
-		}
-		if resolved.Reset.Type != "" {
-			attrs = append(attrs, "reset", resolved.Reset.Type)
-		}
-
-		slog.Debug("template value", attrs...)
+		slog.Debug("template value", "name", name, "value", resolved)
 	}
 	return nil
 }
@@ -100,26 +80,7 @@ func (r *Resolver) resolveInstanceValues() error {
 
 		r.instanceValues[name] = resolved
 
-		sourceName := "<inline>"
-		if resolved.SourceRef != nil {
-			sourceName = *resolved.SourceRef
-		}
-
-		transformNames := make([]string, len(resolved.Transforms))
-		for i, t := range resolved.Transforms {
-			transformNames[i] = t.Type
-		}
-
-		attrs := []any{
-			"name", name,
-			"source", sourceName,
-			"transforms", fmt.Sprintf("[%s]", strings.Join(transformNames, ", ")),
-		}
-		if resolved.Reset.Type != "" {
-			attrs = append(attrs, "reset", resolved.Reset.Type)
-		}
-
-		slog.Debug("instance value", attrs...)
+		slog.Debug("instance value", "name", name, "value", resolved)
 	}
 	return nil
 }
