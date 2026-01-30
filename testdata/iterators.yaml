@@ -1,4 +1,4 @@
-# Test configuration for iterator expansion (clocks, sources, and values)
+# Test configuration for iterator expansion (clocks, sources, values, and metrics)
 
 iterators:
   - name: i
@@ -69,23 +69,68 @@ instances:
       transforms: [accumulate]
 
 metrics:
-  - name: test_events_total
+  # Metric with iterator expansion in name and attributes
+  # Expands to 6 metrics: test_events_total_0_us, test_events_total_0_eu, etc.
+  - name: test_events_total_{i}_{region}
     type: counter
-    description: "Test metric using expanded instance clock, source, and value"
+    description: "Test metric using iterator expansion in name and attributes"
+    value:
+      instance: total_events_{i}_{region}
+    attributes:
+      region: "{region}"
+      index: "{i}"
+      environment: production
+
+  # Metric with iterator in attributes only (name stays same)
+  # Expands to 6 metrics with same name but different attribute values
+  - name: test_events_gauge
+    type: gauge
+    description: "Test gauge with iterator in attributes"
+    value:
+      template: template_total_{i}_{region}
+      reset: on_read
+    attributes:
+      region: "{region}"
+      shard: "shard_{i}"
+
+  # Metric using template value with iterator expansion
+  # Expands to 6 metrics using expanded template values
+  - name: test_template_events_total_{i}_{region}
+    type: counter
+    description: "Test metric using expanded template value"
+    value:
+      template: template_total_{i}_{region}
+    attributes:
+      region: "{region}"
+      index: "{i}"
+
+  # Metric with inline value and iterator in attributes
+  - name: test_inline_events
+    type: counter
+    description: "Test metric with inline value definition and iterator attributes"
+    value:
+      source:
+        type: random_int
+        clock:
+          type: periodic
+          interval: 1s
+        min: 0
+        max: 50
+      transforms: [accumulate]
+    attributes:
+      region: "{region}"
+      datacenter: "dc_{i}"
+
+  # Static metric without iterator expansion (for comparison)
+  - name: test_static_events_total
+    type: counter
+    description: "Static metric without iterator expansion"
     value:
       instance: total_events_0_us
     attributes:
       region: us
       index: "0"
-
-  - name: test_template_events_total
-    type: counter
-    description: "Test metric using expanded template value"
-    value:
-      template: template_total_0_eu
-    attributes:
-      region: eu
-      index: "0"
+      static: "true"
 
 export:
   prometheus:

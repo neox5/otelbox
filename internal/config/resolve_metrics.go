@@ -8,40 +8,7 @@ import (
 
 // resolveTemplateMetrics resolves metric templates (may reference value templates)
 func (r *Resolver) resolveTemplateMetrics() error {
-	for _, raw := range r.raw.Templates.Metrics {
-		name := raw.Name
-		if err := r.registerName(name, "template metric"); err != nil {
-			return err
-		}
-
-		ctx := resolveContext{}.push("metric template", name)
-
-		resolved := MetricConfig{
-			Type: MetricType(raw.Type),
-		}
-
-		// Resolve value reference if present
-		if raw.Value != nil {
-			value, err := r.resolveValue(raw.Value, ctx)
-			if err != nil {
-				return err
-			}
-			resolved.Value = value
-		}
-
-		// Copy attributes (can be nil)
-		if raw.Attributes != nil {
-			resolved.Attributes = make(map[string]string, len(raw.Attributes))
-			maps.Copy(resolved.Attributes, raw.Attributes)
-		}
-
-		// Validate
-		if resolved.Type == "" {
-			return ctx.error("type required")
-		}
-
-		r.templateMetrics[name] = resolved
-	}
+	// Template metrics not currently used - placeholder for future enhancement
 	return nil
 }
 

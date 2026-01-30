@@ -103,6 +103,11 @@ func (e *Expander) ExpandValues(values []RawValueReference) ([]RawValueReference
 	return expand(values, e.registry, "value")
 }
 
+// ExpandMetrics expands metric configs containing iterator placeholders.
+func (e *Expander) ExpandMetrics(metrics []RawMetricConfig) ([]RawMetricConfig, error) {
+	return expand(metrics, e.registry, "metric")
+}
+
 // Expand performs iterator expansion on raw configuration.
 // Mutates raw config in place by replacing arrays with expanded versions.
 func Expand(raw *RawConfig) error {
@@ -145,6 +150,12 @@ func Expand(raw *RawConfig) error {
 	raw.Instances.Values, err = expander.ExpandValues(raw.Instances.Values)
 	if err != nil {
 		return fmt.Errorf("failed to expand instance values: %w", err)
+	}
+
+	// Expand metrics
+	raw.Metrics, err = expander.ExpandMetrics(raw.Metrics)
+	if err != nil {
+		return fmt.Errorf("failed to expand metrics: %w", err)
 	}
 
 	// Clear consumed iterators

@@ -12,10 +12,9 @@ type RawConfig struct {
 
 // RawTemplates holds all template definitions
 type RawTemplates struct {
-	Clocks  []RawClockReference   `yaml:"clocks,omitempty"`
-	Sources []RawSourceReference  `yaml:"sources,omitempty"`
-	Values  []RawValueReference   `yaml:"values,omitempty"`
-	Metrics []RawMetricDefinition `yaml:"metrics,omitempty"`
+	Clocks  []RawClockReference  `yaml:"clocks,omitempty"`
+	Sources []RawSourceReference `yaml:"sources,omitempty"`
+	Values  []RawValueReference  `yaml:"values,omitempty"`
 }
 
 // RawInstances holds all instance definitions
