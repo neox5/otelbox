@@ -8,9 +8,11 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/neox5/obsbox/internal/app"
 	"github.com/neox5/obsbox/internal/config"
+	"github.com/neox5/obsbox/internal/monitor"
 	"github.com/neox5/obsbox/internal/version"
 	"github.com/urfave/cli/v3"
 )
@@ -78,6 +80,11 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 	// Start generator
 	application.Generator.Start()
 	defer application.Generator.Stop()
+
+	// Start resource monitor
+	mon := monitor.New(5*time.Second, logger)
+	mon.Run(shutdownCtx)
+	defer mon.Wait()
 
 	// Start exporters
 	slog.Debug("--- Exporter Initialization ---")
