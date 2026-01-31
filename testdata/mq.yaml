@@ -1,59 +1,35 @@
 iterators:
-  - name: queue_id
+  - name: q
     type: range
     start: 1
     end: 100
 
-templates:
-  clocks:
-    - name: tick_mqput
-      type: periodic
-      interval: 200ms
-
+instances:
   sources:
-    - name: mqput_events
+    - name: src_int_{q}
       type: random_int
       clock:
-        template: tick_mqput
+        type: periodic
+        interval: 1s
       min: 0
       max: 10
 
   values:
-    - name: mqput_total
+    - name: v_counter_{q}
       source:
-        template: mqput_events
-      transforms: [accumulate]
+        instance: src_int_{q}
+      transform: [accumulate]
 
-    - name: mqput_rate
+    - name: v_count_reset_{q}
       source:
-        template: mqput_events
-      transforms: [accumulate]
+        instance: src_int_{q}
+      transform: [accumulate]
       reset: on_read
 
-instances:
-  clocks:
-    - name: main_clock
-      type: periodic
-      interval: 200ms
-
-  sources:
-    - name: mqput_source_{queue_id}
-      type: random_int
-      clock:
-        instance: main_clock
-      min: 0
-      max: 10
-
-  values:
-    - name: mqput_counter_{queue_id}
+    - name: v_count_reset2_{q}
       source:
-        instance: mqput_source_{queue_id}
-      transforms: [accumulate]
-
-    - name: mqput_gauge_{queue_id}
-      source:
-        instance: mqput_source_{queue_id}
-      transforms: [accumulate]
+        instance: src_int_{q}
+      transform: [accumulate]
       reset: on_read
 
 metrics:
@@ -63,10 +39,9 @@ metrics:
     type: counter
     description: "Total MQ PUT operations since start"
     value:
-      instance: mqput_counter_{queue_id}
+      instance: v_counter_{q}
     attributes:
-      queue: "QUEUE.{queue_id}"
-      qmgr: QM1
+      queue: QUEUE_{q}
 
   - name:
       prometheus: ibmmq_queue_mqput_count_ratio
@@ -74,17 +49,16 @@ metrics:
     type: gauge
     description: "Recent MQ PUT operations in window"
     value:
-      instance: mqput_gauge_{queue_id}
+      instance: v_count_reset_{q}
     attributes:
-      queue: "QUEUE.{queue_id}"
-      qmgr: QM1
+      queue: QUEUE_{q}
 
-export:
-  prometheus:
-    enabled: true
-    port: 9090
-    path: /metrics
-
-settings:
-  internal_metrics:
-    enabled: false
+  - name:
+      prometheus: ibmmq_queue_mqput2_count_ratio
+      otel: ibmmq.queue.mqput2.rate
+    type: gauge
+    description: "Recent MQ PUT operations in window"
+    value:
+      instance: v_count_reset2_{q}
+    attributes:
+      queue: QUEUE_{q}
