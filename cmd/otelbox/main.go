@@ -113,22 +113,17 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 	select {
 	case err := <-errChan:
 		slog.Error("exporter error", "error", err)
-		return err
+		stop() // Cancel context to trigger shutdown
 	case <-shutdownCtx.Done():
-		// Graceful shutdown
+		// Graceful shutdown triggered
 	}
 
 	slog.Debug("--- Shutdown Initiated ---")
 
-	// Stop exporters
-	if application.PrometheusExporter != nil {
-		application.PrometheusExporter.Stop()
-	}
-	if application.OTELExporter != nil {
-		application.OTELExporter.Stop()
-	}
-
+	// Wait for all goroutines to complete
+	// The exporters' Start methods will return when shutdownCtx is cancelled
 	wg.Wait()
+
 	slog.Info("shutdown complete")
 	return nil
 }

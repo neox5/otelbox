@@ -39,8 +39,6 @@ func New(interval time.Duration, logger *slog.Logger) *Monitor {
 // Blocks until context is cancelled.
 func (m *Monitor) Run(ctx context.Context) {
 	m.wg.Go(func() {
-		defer m.wg.Done()
-
 		ticker := time.NewTicker(m.interval)
 		defer ticker.Stop()
 

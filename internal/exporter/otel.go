@@ -19,7 +19,6 @@ type OTELExporter struct {
 	meterProvider *sdkmetric.MeterProvider
 	meter         otelmetric.Meter
 	instruments   []instrument
-	cancelFunc    context.CancelFunc
 }
 
 // instrument holds an OTEL observable instrument and its value reference.
@@ -66,6 +65,7 @@ func NewOTELExporter(
 }
 
 // Start begins periodic metric export.
+// Blocks until context is cancelled, then shuts down gracefully.
 func (e *OTELExporter) Start(ctx context.Context) error {
 	slog.Info("starting otel exporter",
 		"transport", e.config.Transport,
@@ -73,26 +73,13 @@ func (e *OTELExporter) Start(ctx context.Context) error {
 		"push_interval", e.config.Interval.Push,
 	)
 
-	// Create cancellable context
-	readCtx, cancel := context.WithCancel(ctx)
-	e.cancelFunc = cancel
-
-	// Periodic reader handles push automatically
 	// Wait for context cancellation
-	<-readCtx.Done()
-	return nil
-}
+	<-ctx.Done()
 
-// Stop gracefully stops the exporter.
-func (e *OTELExporter) Stop() error {
+	// Shutdown meter provider
 	slog.Info("shutting down otel exporter")
-
-	if e.cancelFunc != nil {
-		e.cancelFunc()
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	return e.meterProvider.Shutdown(ctx)
+	return e.meterProvider.Shutdown(shutdownCtx)
 }

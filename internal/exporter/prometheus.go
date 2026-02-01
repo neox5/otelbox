@@ -42,6 +42,7 @@ func NewPrometheusExporter(
 }
 
 // Start begins serving HTTP requests.
+// Blocks until context is cancelled, then shuts down gracefully.
 func (e *PrometheusExporter) Start(ctx context.Context) error {
 	errChan := make(chan error, 1)
 
@@ -56,15 +57,10 @@ func (e *PrometheusExporter) Start(ctx context.Context) error {
 	case err := <-errChan:
 		return err
 	case <-ctx.Done():
-		return e.Stop()
+		// Graceful shutdown
+		slog.Info("shutting down prometheus exporter")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return e.server.Shutdown(shutdownCtx)
 	}
-}
-
-// Stop gracefully stops the exporter.
-func (e *PrometheusExporter) Stop() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	slog.Info("shutting down prometheus exporter")
-	return e.server.Shutdown(ctx)
 }
